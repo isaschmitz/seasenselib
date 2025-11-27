@@ -36,6 +36,8 @@ For recommendations or bug reports, please visit https://github.com/ocean-uhh/se
    :caption: Help and reference
 
    GitHub Repo <http://github.com/ocean-uhh/seasenselib>
+   supported_formats
+   developers_guide
    api_reference
 
 
