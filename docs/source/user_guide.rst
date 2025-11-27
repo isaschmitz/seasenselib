@@ -185,9 +185,9 @@ Working with Different Instruments
 Getting Help
 ------------
 
-- **Documentation**: Full API reference and examples at `seasenselib.readthedocs.io`
+- **Documentation**: Full API reference and examples at `https://ocean-uhh.github.io/seasenselib/ <https://ocean-uhh.github.io/seasenselib/>`_
 - **Command help**: ``seasenselib --help`` or ``seasenselib <command> --help``
 - **Supported formats**: ``seasenselib list readers``
-- **Issues**: Report problems at `github.com/ocean-uhh/seasenselib/issues`
+- **Issues**: Report problems at `http://github.com/ocean-uhh/seasenselib/issues <http://github.com/ocean-uhh/seasenselib/issues>`_
 
 For advanced usage, custom readers, or library extension, see the :doc:`developers_guide`.

@@ -623,7 +623,7 @@ Troubleshooting and Migration
 Use explicit format specification when:
 
 - Automatic detection fails
-- You have files with extensions that do not map one-to-one with a reader (e.g., *.mat or *.dat)non-standard extensions
+- You have files with extensions that do not map one-to-one with a reader (e.g., *.mat or *.dat) 
 - You need to override the default reader choice
 
 .. code-block:: python
