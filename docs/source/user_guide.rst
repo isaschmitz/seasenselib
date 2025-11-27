@@ -1,7 +1,12 @@
 User Guide
 ==========
 
-SeaSenseLib provides a simple, unified API for oceanographic data processing. This guide shows you how to read, process, and visualize data from various oceanographic instruments.
+SeaSenseLib provides a simple, unified API for oceanographic data processing. This guide shows you how to read, process, and visualize data from various oceanographic instruments.  This guide covers the generalised API for working with the library.  
+
+- For the legacy API, see the :ref:`developers_guide`.
+- For a complete walkthrough with examples, see the `Demo Notebook <https://ocean-uhh.github.io/seasenselib/demo-output.html>`_.
+- For a examples loading different moored instrument formats, see the `Mooring Demo Notebook <https://ocean-uhh.github.io/seasenselib/demo_mooring-output.html>`_.
+- For a list of supported formats and instruments, see :doc:`supported_formats`.
 
 Quick Start
 -----------
