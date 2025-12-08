@@ -31,7 +31,7 @@ class ConvertCommand(BaseCommand):
                         )
 
             # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input)
+            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
 
             if not data:
                 raise ValidationError('No data found in file.')
@@ -53,7 +53,7 @@ class ShowCommand(BaseCommand):
         """Execute show command."""
         try:
             # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input)
+            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
 
             if not data:
                 raise ValidationError('No data found in file.')
@@ -84,7 +84,7 @@ class SubsetCommand(BaseCommand):
             from ...processors import SubsetProcessor
 
             # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input)
+            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
 
             if not data:
                 raise ValidationError('No data found in file.')
@@ -133,7 +133,7 @@ class CalcCommand(BaseCommand):
             from ...processors import ResampleProcessor, StatisticsProcessor
             
             # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input)
+            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
 
             if not data:
                 raise ValidationError('No data found in file.')

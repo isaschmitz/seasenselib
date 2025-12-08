@@ -13,10 +13,10 @@ LONGITUDE = 'longitude'
 DENSITY = 'density'
 POTENTIAL_TEMPERATURE = 'potential_temperature'
 SPEED_OF_SOUND = 'speed_of_sound'
-TIME_J = 'julian_days_offset'
-TIME_Q = 'seconds_since_jan_1_2000'
-TIME_N = 'timeN'
-TIME_S = 'timeS'
+TIME_J = 'timeJ'  # Julian days offset
+TIME_Q = 'timeQ'  # Seconds since January 1, 2000
+TIME_N = 'timeN'  # Seconds since January 1, 1970 (Unix epoch)
+TIME_S = 'timeS'  # Elapsed seconds since start_time
 POWER_SUPPLY_INPUT_VOLTAGE = 'power_supply_input'
 EAST_VELOCITY = 'east_velocity'
 NORTH_VELOCITY = 'north_velocity'
@@ -215,8 +215,8 @@ default_mappings = {
         'cond0', 'cond1'
     ],
     PRESSURE: [
-        'prdM', 'prDM', 
-        'pr', 'pr50M', 'pr200M', 'pr350M', 'pr600M', 'pr1000M',
+        'prdM', 'prDM', 'prSM', 'prM',
+        'pr', 'pr50M', 'pr50M1', 'pr200M', 'pr350M', 'pr600M', 'pr1000M',
         'PRES', 'Pressure', 'Sea Pressure', 'Sea pressure',
         'p'
     ],

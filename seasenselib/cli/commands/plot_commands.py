@@ -44,7 +44,13 @@ class PlotCommand(BaseCommand):
                 )
             
             # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input)
+            data = self.io.read_data(
+                args.input, 
+                args.input_format, 
+                args.header_input,
+                sanitize_input=not args.no_sanitize,
+                fix_missing_coords=not args.no_fix_coords
+            )
             
             if not data:
                 raise ValidationError('No data found in file.')
