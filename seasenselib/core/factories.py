@@ -102,7 +102,8 @@ class ReaderFactory:
 
         # Special case: SeaBird CNV reader supports configuration flags
         if format_key == "sbe-cnv":
-            return reader_class(input_file, 
+            return reader_class(input_file,
+                              mapping=None,
                               sanitize_input=sanitize_input,
                               fix_missing_coords=fix_missing_coords)
 

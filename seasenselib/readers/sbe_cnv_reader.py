@@ -23,7 +23,7 @@ class SbeCnvReader(AbstractReader):
     - File sanitization: Fixes trailing whitespace and malformed lines that cause pycnv errors
     - Coordinate defaults: Uses 45° latitude when missing (common for moored instruments)
     
-    These behaviors can be controlled via the auto_sanitize and auto_fix_coordinates parameters.
+    These behaviors can be controlled via the sanitize_input and fix_missing_coords parameters.
 
     Attributes
     ----------
@@ -62,14 +62,14 @@ class SbeCnvReader(AbstractReader):
     >>> reader = SbeCnvReader('data.cnv', sanitize_input=False)
     """
 
-    def __init__(self, input_file, mapping = None, 
-                 input_header_file = None,
-                 perform_default_postprocessing = True, 
-                 rename_variables = True,
-                 assign_metadata = True, 
-                 sort_variables = True,
-                 sanitize_input = True,
-                 fix_missing_coords = True):
+    def __init__(self, input_file, mapping=None, 
+                 input_header_file=None,
+                 perform_default_postprocessing=True, 
+                 rename_variables=True,
+                 assign_metadata=True, 
+                 sort_variables=True,
+                 sanitize_input=True,
+                 fix_missing_coords=True):
         """Initialize SbeCnvReader with configuration options.
         
         Parameters
@@ -548,12 +548,6 @@ class SbeCnvReader(AbstractReader):
                 else:
                     lat = None
             
-            if lon is None or (isinstance(lon, float) and np.isnan(lon)):
-                if params.LONGITUDE in xarray_data:
-                    lon = xarray_data[params.LONGITUDE][0]
-                else:
-                    lon = None
-            
             # Use default latitude if not available and fix_missing_coords is enabled
             if lat is None or (isinstance(lat, float) and np.isnan(lat)):
                 if self.fix_missing_coords:
@@ -626,7 +620,8 @@ class SbeCnvReader(AbstractReader):
                 # Clean up temp file if writing fails
                 try:
                     os.unlink(temp_path)
-                except:
+                except Exception:
+                    # Ignore errors during cleanup - the original exception is more important
                     pass
                 raise e
         
@@ -653,7 +648,8 @@ class SbeCnvReader(AbstractReader):
             if was_sanitized and os.path.exists(file_to_read):
                 try:
                     os.unlink(file_to_read)
-                except:
+                except Exception:
+                    # Ignore errors during cleanup - the original exception is more important
                     pass
             
             # Provide helpful error message
@@ -666,13 +662,6 @@ class SbeCnvReader(AbstractReader):
                 ) from e
             else:
                 raise ValueError(f"pycnv failed to parse CNV file: {error_msg}") from e
-        finally:
-            # Clean up temporary sanitized file if one was created
-            if was_sanitized and os.path.exists(file_to_read):
-                try:
-                    os.unlink(file_to_read)
-                except Exception as e:
-                    print(f"Warning: Could not delete temporary file {file_to_read}: {e}")
 
         # Map column names ('channel names') to standard names
         channel_names = [d['name'] for d in cnv.channels if 'name' in d]
@@ -732,6 +721,13 @@ class SbeCnvReader(AbstractReader):
 
         # Store processed data
         self.data = ds
+
+        # Clean up temporary sanitized file after all processing is complete
+        if was_sanitized and os.path.exists(file_to_read):
+            try:
+                os.unlink(file_to_read)
+            except Exception as e:
+                print(f"Warning: Could not delete temporary file {file_to_read}: {e}")
 
     @staticmethod
     def format_key() -> str:
