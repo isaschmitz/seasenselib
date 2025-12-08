@@ -43,7 +43,9 @@ class ReaderFactory:
         self._discovery = ReaderDiscovery()
 
     def create_reader(self, format_key: str, input_file: str, 
-                     header_file: Optional[str] = None) -> AbstractReader:
+                     header_file: Optional[str] = None,
+                     sanitize_input: bool = True,
+                     fix_missing_coords: bool = True) -> AbstractReader:
         """
         Create a reader instance for the given format.
         
@@ -55,6 +57,10 @@ class ReaderFactory:
             Path to the input file
         header_file : str, optional
             Path to header file (required for some formats like Nortek ASCII)
+        sanitize_input : bool, default=True
+            Whether to automatically fix known file format issues (for CNV readers)
+        fix_missing_coords : bool, default=True
+            Whether to use default values for missing coordinates (for CNV readers)
             
         Returns:
         --------
@@ -72,10 +78,13 @@ class ReaderFactory:
             raise ReaderError(f"No reader found for format: {format_key}")
 
         # Check if reader needs special parameters
-        return self._instantiate_reader(reader_class, format_key, input_file, header_file)
+        return self._instantiate_reader(reader_class, format_key, input_file, header_file,
+                                       sanitize_input, fix_missing_coords)
 
     def _instantiate_reader(self, reader_class: type, format_key: str,
-                          input_file: str, header_file: Optional[str]) -> AbstractReader:
+                          input_file: str, header_file: Optional[str],
+                          sanitize_input: bool = True,
+                          fix_missing_coords: bool = True) -> AbstractReader:
         """
         Instantiate reader with appropriate parameters.
         
@@ -90,6 +99,13 @@ class ReaderFactory:
                     "Use --header-input to specify the header file."
                 )
             return reader_class(input_file, header_file)
+
+        # Special case: SeaBird CNV reader supports configuration flags
+        if format_key == "sbe-cnv":
+            return reader_class(input_file,
+                              mapping=None,
+                              sanitize_input=sanitize_input,
+                              fix_missing_coords=fix_missing_coords)
 
         # Standard case: most readers just need the input file
         return reader_class(input_file)

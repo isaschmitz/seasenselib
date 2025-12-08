@@ -147,6 +147,12 @@ class ArgumentParser:
         parser.add_argument('-t', '--title', type=str,
                     help='Title of the plot')
         
+        # Reader configuration flags (for SeaBird CNV and similar formats)
+        parser.add_argument('--no-sanitize', action='store_true', default=False,
+                    help='Disable automatic file format fixes (stricter parsing)')
+        parser.add_argument('--no-fix-coords', action='store_true', default=False,
+                    help='Disable automatic coordinate defaults (require explicit lat/lon)')
+        
         # Try to let the plotter class declare its own CLI args (plugins supported)
         try:
             # Lazy import discovery to avoid heavy imports when not needed
@@ -194,6 +200,19 @@ class ArgumentParser:
 
         return parser
 
+    def _add_reader_config_args(self, parser):
+        """Add reader configuration arguments (for CNV and other formats).
+        
+        Parameters
+        ----------
+        parser : argparse.ArgumentParser
+            Parser to add arguments to
+        """
+        parser.add_argument('--no-sanitize', action='store_true', default=False,
+                    help='Disable automatic file format fixes (stricter parsing)')
+        parser.add_argument('--no-fix-coords', action='store_true', default=False,
+                    help='Disable automatic coordinate defaults (require explicit lat/lon)')
+
     def _add_convert_parser(self, subparsers):
         """Add convert command parser."""
         # We'll import parameters only when needed
@@ -223,6 +242,7 @@ class ArgumentParser:
                     help=format_help)
         convert_parser.add_argument('-m', '--mapping', nargs='+',
                     help=mapping_help)
+        self._add_reader_config_args(convert_parser)
 
     def _add_show_parser(self, subparsers):
         """Add show command parser."""
@@ -238,6 +258,7 @@ class ArgumentParser:
         show_parser.add_argument('-s', '--schema', type=str,
                     choices=['summary', 'info', 'example'], default='summary',
                     help='What to show.')
+        self._add_reader_config_args(show_parser)
 
     def _add_list_parser(self, subparsers):
         """Add list command parser."""
@@ -324,6 +345,7 @@ class ArgumentParser:
                     help='Minimum value for the specified parameter')
         subset_parser.add_argument('--value-max', type=float, 
                     help='Maximum value for the specified parameter')
+        self._add_reader_config_args(subset_parser)
 
     def _add_calc_parser(self, subparsers):
         """Add calc command parser."""
@@ -353,3 +375,4 @@ class ArgumentParser:
                     help='Resample the time series.')
         calc_parser.add_argument('-T', '--time-interval', type=str,
                     help='Time interval for resampling. Examples: 1M (one month)')
+        self._add_reader_config_args(calc_parser)

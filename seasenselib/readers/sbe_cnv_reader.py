@@ -19,7 +19,13 @@ class SbeCnvReader(AbstractReader):
     sensor data. The provided data is expected to be in a CNV format, and this reader
     is designed to parse that format correctly.
 
-    Attributes:
+    The reader includes automatic fixing capabilities for common issues:
+    - File sanitization: Fixes trailing whitespace and malformed lines that cause pycnv errors
+    - Coordinate defaults: Uses 45° latitude when missing (common for moored instruments)
+    
+    These behaviors can be controlled via the sanitize_input and fix_missing_coords parameters.
+
+    Attributes
     ----------
     data : xr.Dataset
         The xarray Dataset containing the sensor data to be read from the CNV file.
@@ -27,31 +33,75 @@ class SbeCnvReader(AbstractReader):
         The path to the input CNV file containing the sensor data.
     mapping : dict
         A mapping dictionary for renaming variables or attributes in the dataset.
+    sanitize_input : bool
+        Whether to automatically fix file format issues (default: True).
+    fix_missing_coords : bool
+        Whether to use default values for missing coordinates (default: True).
 
-    Methods:
+    Methods
     -------
-    __init__(input_file, mapping = {}):
-        Initializes the CnvReader with the input file and optional mapping.
-    __read():
-        Reads the CNV file and processes the data into an xarray Dataset.
-    __get_scan_interval_in_seconds(string):
-        Extracts the scan interval in seconds from the CNV file header.
-    __get_bad_flag(string):
-        Extracts the bad flag from the CNV file header.
-    file_type: str
-        The type of the file being read, which is 'SBE CNV'.
-    _file_extension: str
-        The file extension for this reader, which is '.cnv'.
+    __init__(input_file, mapping=None, sanitize_input=True, fix_missing_coords=True):
+        Initializes the CnvReader with the input file and configuration options.
     get_data():
         Returns the xarray Dataset containing the sensor data.
     get_file_type():
         Returns the type of the file being read, which is 'SBE CNV'.
     get_file_extension():
         Returns the file extension for this reader, which is '.cnv'.
+    
+    Examples
+    --------
+    >>> # Default behavior (auto-fix enabled)
+    >>> reader = SbeCnvReader('mooring_data.cnv')
+    >>> ds = reader.get_data()
+    
+    >>> # Disable automatic coordinate fixing
+    >>> reader = SbeCnvReader('mooring_data.cnv', fix_missing_coords=False)
+    
+    >>> # Disable file sanitization (stricter parsing)
+    >>> reader = SbeCnvReader('data.cnv', sanitize_input=False)
     """
 
-    def __init__(self, input_file, mapping = None):
-        super().__init__(input_file, mapping)
+    def __init__(self, input_file, mapping=None, 
+                 input_header_file=None,
+                 perform_default_postprocessing=True, 
+                 rename_variables=True,
+                 assign_metadata=True, 
+                 sort_variables=True,
+                 sanitize_input=True,
+                 fix_missing_coords=True):
+        """Initialize SbeCnvReader with configuration options.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the CNV file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        input_header_file : str, optional
+            Path to separate header file (if applicable).
+        perform_default_postprocessing : bool, default=True
+            Whether to perform default post-processing.
+        rename_variables : bool, default=True
+            Whether to rename variables to standard names.
+        assign_metadata : bool, default=True
+            Whether to assign CF-compliant metadata.
+        sort_variables : bool, default=True
+            Whether to sort variables alphabetically.
+        sanitize_input : bool, default=True
+            Whether to automatically fix known file format issues (e.g., trailing
+            whitespace in start_time lines). When False, files with format issues
+            may fail to load. CLI flag: --no-sanitize
+        fix_missing_coords : bool, default=True
+            Whether to automatically use default values for missing coordinates
+            (e.g., 45° latitude for depth calculation). When False, missing
+            coordinates will result in NaN values. CLI flag: --no-fix-coords
+        """
+        super().__init__(input_file, mapping, input_header_file,
+                        perform_default_postprocessing, rename_variables,
+                        assign_metadata, sort_variables)
+        self.sanitize_input = sanitize_input
+        self.fix_missing_coords = fix_missing_coords
         self.__read()
 
     def __get_scan_interval_in_seconds(self, string):
@@ -154,6 +204,8 @@ class SbeCnvReader(AbstractReader):
 
         # Define the time coordinates as an array of datetime values
         time_coords = None  # Initialize to avoid unbound variable error
+        
+        # Check for time variables (params match raw CNV names after mapping)
         if params.TIME_S in xarray_data:
             time_coords = np.array([self._elapsed_seconds_since_offset_to_datetime(elapsed_seconds, offset_datetime) \
                                    for elapsed_seconds in xarray_data[params.TIME_S]])
@@ -464,6 +516,13 @@ class SbeCnvReader(AbstractReader):
         -------
         numpy.ndarray | None 
             Depth values in meters, or None if pressure not available.
+            
+        Notes
+        -----
+        If latitude is not available from CNV metadata or data columns, a default
+        value of 45° is used. This is standard practice in oceanography for cases
+        like moored instruments. The depth error from using 45° instead of actual
+        latitude is typically < 0.3m at typical CTD depths (< 0.5m at 100 dbar).
         """
 
         import gsw
@@ -481,58 +540,128 @@ class SbeCnvReader(AbstractReader):
         if params.PRESSURE in xarray_data:
             lat = cnv.lat
             lon = cnv.lon
-            if lat is None and params.LATITUDE in xarray_data:
-                lat = xarray_data[params.LATITUDE][0]
-            if lon is None and params.LONGITUDE in xarray_data:
-                lon = xarray_data[params.LONGITUDE][0]
+            
+            # Check if lat is None or NaN
+            if lat is None or (isinstance(lat, float) and np.isnan(lat)):
+                if params.LATITUDE in xarray_data:
+                    lat = xarray_data[params.LATITUDE][0]
+                else:
+                    lat = None
+            
+            # Use default latitude if not available and fix_missing_coords is enabled
+            if lat is None or (isinstance(lat, float) and np.isnan(lat)):
+                if self.fix_missing_coords:
+                    lat = 45.0
+                    print(f"Warning: Latitude not found in CNV file '{self.input_file}'. "
+                          f"Using default latitude of {lat}° for depth calculation. "
+                          f"This is common for moored instruments and typically introduces < 0.3m error. "
+                          f"Set fix_missing_coords=False to disable this behavior.")
+                else:
+                    # If fix_missing_coords is disabled, lat remains None and will produce NaN depths
+                    print(f"Warning: Latitude not found in CNV file '{self.input_file}'. "
+                          f"Depth values will be NaN. Set fix_missing_coords=True to use default latitude.")
+            
             depth = gsw.conversions.z_from_p(xarray_data[params.PRESSURE], lat)
 
         return depth
 
-    def _check_bad_lines(self, file):
-        """ Checks if the raw data contains lines fitting patterns which can't be processed by pycnv. 
+    def _sanitize_cnv_file(self, file):
+        """ Sanitizes a CNV file to fix known issues that pycnv cannot handle.
+        
+        This function creates a temporary sanitized version of the CNV file,
+        fixing common issues like trailing whitespace in start_time lines.
         
         Parameters
         ----------
         file : str
-            Path to the CNV file to check.
+            Path to the CNV file to sanitize.
 
         Returns
         -------
+        str
+            Path to the sanitized file (may be a temporary file or the original).
         bool
-            True if bad lines are found, False otherwise.
-        str | None
-            Error message if bad lines are found, None otherwise.
+            True if sanitization was needed, False if file was already clean.
         """
-
-        # Define patterns to check for with specific error hints
-        pattern_errors = {
-            r'^# start_time \= [A-Za-z]{3} \d{1,2} \d{4} \d{2}:\d{2}:\d{2}\s+$': 
-                "Start time has trailing whitespace that causes pycnv parsing errors",
-            r'^\* \*': 
-                "Lines starting with multiple asterisks are malformed and cannot be processed by pycnv",
-        }
-
-        # Open file and check each line for patterns
-        with open(file, 'r') as f:
+        import tempfile
+        import os
+        
+        needs_sanitization = False
+        sanitized_lines = []
+        
+        # Read file and check/fix problematic patterns
+        with open(file, 'r', encoding='utf-8', errors='replace') as f:
             for line_num, line in enumerate(f, 1):
-                for pattern, error_hint in pattern_errors.items():
-                    if re.match(pattern, line):
-                        return True, f"Line {line_num}: {error_hint}. Problematic line: {line.strip()}"
-        return False, None
+                # Fix 1: Remove trailing whitespace from start_time lines
+                if re.match(r'^# start_time \= [A-Za-z]{3} \d{1,2} \d{4} \d{2}:\d{2}:\d{2}\s+$', line):
+                    line = line.rstrip() + '\n'
+                    needs_sanitization = True
+                    print(f"Warning: Fixed trailing whitespace in start_time at line {line_num}")
+                
+                # Fix 2: Skip lines starting with multiple asterisks (malformed)
+                if re.match(r'^\* \*', line):
+                    print(f"Warning: Skipping malformed line {line_num}: {line.strip()}")
+                    needs_sanitization = True
+                    continue
+                
+                sanitized_lines.append(line)
+        
+        # If sanitization was needed, create a temporary file
+        if needs_sanitization:
+            # Create temporary file in the same directory to preserve relative paths
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.cnv', prefix='sanitized_', 
+                                                   dir=os.path.dirname(file) or '.')
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    f.writelines(sanitized_lines)
+                print(f"Info: Created sanitized temporary file for pycnv processing")
+                return temp_path, True
+            except Exception as e:
+                # Clean up temp file if writing fails
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    # Ignore errors during cleanup - the original exception is more important
+                    pass
+                raise e
+        
+        return file, False
 
     def __read(self):
         """ Reads a CNV file and converts it to a xarray Dataset. """
 
         import pycnv
+        import os
 
-        # Check if the file contains bad lines
-        has_bad_lines, error_message = self._check_bad_lines(self.input_file)
-        if has_bad_lines:
-            raise ValueError(f"The file {self.input_file} contains lines that cannot be processed by pycnv. {error_message}")
-
-        # Read CNV file with pycnv reader
-        cnv = pycnv.pycnv(self.input_file)
+        # Sanitize the file if sanitize_input is enabled (fixes pycnv incompatibilities)
+        if self.sanitize_input:
+            file_to_read, was_sanitized = self._sanitize_cnv_file(self.input_file)
+        else:
+            file_to_read = self.input_file
+            was_sanitized = False
+        
+        try:
+            # Read CNV file with pycnv reader
+            cnv = pycnv.pycnv(file_to_read)
+        except Exception as e:
+            # Clean up temp file before re-raising
+            if was_sanitized and os.path.exists(file_to_read):
+                try:
+                    os.unlink(file_to_read)
+                except Exception:
+                    # Ignore errors during cleanup - the original exception is more important
+                    pass
+            
+            # Provide helpful error message
+            error_msg = str(e)
+            if "dimension 'time' already exists" in error_msg:
+                raise ValueError(
+                    f"pycnv failed to parse CNV file: {error_msg}\n"
+                    f"This is a known pycnv issue with certain CNV file formats. "
+                    f"The file may have incompatible time variables or header formatting."
+                ) from e
+            else:
+                raise ValueError(f"pycnv failed to parse CNV file: {error_msg}") from e
 
         # Map column names ('channel names') to standard names
         channel_names = [d['name'] for d in cnv.channels if 'name' in d]
@@ -575,9 +704,11 @@ class SbeCnvReader(AbstractReader):
 
         # If "depth" not in ds, create depth variable
         if params.DEPTH not in ds:
-            ds[params.DEPTH] = (["time"], self.__calculate_depth_from_pressure(xarray_data, xarray_labels, xarray_units, cnv))
-            if self.assign_metadata:
-                self._assign_metadata_for_key_to_xarray_dataset(ds, params.DEPTH)
+            depth_data = self.__calculate_depth_from_pressure(xarray_data, xarray_labels, xarray_units, cnv)
+            if depth_data is not None:
+                ds[params.DEPTH] = (["time"], depth_data)
+                if self.assign_metadata:
+                    self._assign_metadata_for_key_to_xarray_dataset(ds, params.DEPTH)
 
         # Derive oceanographic parameters (density, potential temperature)
         ds = self._derive_oceanographic_parameters(ds)
@@ -590,6 +721,13 @@ class SbeCnvReader(AbstractReader):
 
         # Store processed data
         self.data = ds
+
+        # Clean up temporary sanitized file after all processing is complete
+        if was_sanitized and os.path.exists(file_to_read):
+            try:
+                os.unlink(file_to_read)
+            except Exception as e:
+                print(f"Warning: Could not delete temporary file {file_to_read}: {e}")
 
     @staticmethod
     def format_key() -> str:
