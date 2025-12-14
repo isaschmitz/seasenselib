@@ -105,4 +105,4 @@ To modify this plugin:
 
 ## License
 
-Same as SeaSenseLib (AGPL-3.0)
+Same as SeaSenseLib (MIT)

@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 
 name = "seasenselib"
-version = "0.2.0"
+version = "0.4.0"
 description = "Read, convert, and plot oceanographic sensor data from moored instruments."
 readme = "README.md"
-requires-python = ">=3.7"
-license = "AGPL-3.0-only"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
 
 authors = [
   { name = "Eleanor Frajka-Williams" },
@@ -22,12 +22,23 @@ maintainers = [
 ]
 
 classifiers = [
+  "Development Status :: 4 - Beta",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Pure Python",
+  "Environment :: Console",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: Oceanography",
+  "Topic :: Software Development :: Libraries :: Python Modules",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Developers",
-  "Natural Language :: English"
+  "Natural Language :: English",
+  "License :: OSI Approved :: MIT License"
 ]
 
 keywords = [
@@ -46,8 +57,7 @@ keywords = [
   "conventions",
   "tools",
   "plotting",
-  "adcp",
-  "netcdf"
+  "adcp"
 ]
 
 dependencies = [
