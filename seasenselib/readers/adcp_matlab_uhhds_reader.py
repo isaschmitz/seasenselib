@@ -31,8 +31,13 @@ class AdcpMatlabUhhdsReader(AbstractReader):
             Initializes the AdcpMatlabReader with the input file.
         __read():
             Reads the ADCP file and processes the data into an xarray Dataset.
-        get_data():
+        
+        Properties
+        ----------
+        data : xr.Dataset (read-only)
             Returns the xarray Dataset containing the sensor data.
+            For backward compatibility, get_data() method is also available but deprecated.
+        
         _detect_format():
             Detects the format of the ADCP -mat input file and redirects accordingly.
         _parse_time():
@@ -45,30 +50,54 @@ class AdcpMatlabUhhdsReader(AbstractReader):
             Adds common metadata attributes to the dataset.
         """
 
-    def __init__(self, input_file, mapping=None):
-        super().__init__(input_file, mapping)
-        self.dataset = None
-        self.format = None
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize AdcpMatlabUhhDsReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the MAT file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(input_file, mapping, **kwargs)
+        self._format = None
         self._read()
 
     def _read(self):
         import scipy.io
 
-        self.data = scipy.io.loadmat(self.input_file, struct_as_record=False)
-        self.format = self._detect_format()
-        if not self.format:
+        # Load raw MATLAB data into temporary variable
+        self._raw_matlab_data = scipy.io.loadmat(self.input_file, struct_as_record=False)
+        self._format = self._detect_format()
+        if not self._format:
             raise ValueError(f"Could not detect ADCP format in {self.input_file}.")
         data_vars, coords = self._add_data_and_coords()
-        self.dataset = xr.Dataset(data_vars=data_vars, coords=coords)
+        dataset = xr.Dataset(data_vars=data_vars, coords=coords)
         # Assign meta information for all attributes of the xarray Dataset
-        for key in (list(self.dataset.data_vars.keys()) + list(self.dataset.coords.keys())):
-            super()._assign_metadata_for_key_to_xarray_dataset(self.dataset, key)
-
-    def get_data(self):
-        return self.dataset
+        for key in (list(dataset.data_vars.keys()) + list(dataset.coords.keys())):
+            super()._assign_metadata_for_key_to_xarray_dataset(dataset, key)
+        
+        # Store the final xarray Dataset in self._data
+        self._data = dataset
 
     def _detect_format(self):
-        keys = self.data.keys()
+        keys = self._raw_matlab_data.keys()
         if "dat_u" in keys and "dat_timesteps" in keys:
             return "v17"
         elif "SerYear" in keys and "RDIBin1Mid" in keys:
@@ -85,7 +114,7 @@ class AdcpMatlabUhhdsReader(AbstractReader):
             return pd.to_datetime(time_raw - 719529, unit="D")
         
         elif fmt == "v11":
-            sens_struct = self.data['sens']
+            sens_struct = self._raw_matlab_data['sens']
             if isinstance(sens_struct, np.ndarray):
                 sens_struct = sens_struct[0, 0]
 
@@ -95,13 +124,13 @@ class AdcpMatlabUhhdsReader(AbstractReader):
     
             return pd.to_datetime(time_raw, unit='s', errors='coerce')
         elif fmt == "v13":
-            year = self.data['SerYear'].astype(np.int32).flatten()
+            year = self._raw_matlab_data['SerYear'].astype(np.int32).flatten()
             year = np.where(year > 50, year + 1900, year + 2000)
-            month = self.data['SerMon'].flatten()
-            day = self.data['SerDay'].flatten()
-            hour = self.data['SerHour'].flatten()
-            minute = self.data['SerMin'].flatten()
-            second =  self.data['SerSec'].flatten() + self.data['SerHund'].flatten() / 100
+            month = self._raw_matlab_data['SerMon'].flatten()
+            day = self._raw_matlab_data['SerDay'].flatten()
+            hour = self._raw_matlab_data['SerHour'].flatten()
+            minute = self._raw_matlab_data['SerMin'].flatten()
+            second =  self._raw_matlab_data['SerSec'].flatten() + self._raw_matlab_data['SerHund'].flatten() / 100
             return pd.to_datetime({
                 'year': year,
                 'month': month,
@@ -111,53 +140,53 @@ class AdcpMatlabUhhdsReader(AbstractReader):
                 'second': second
             })
     def _add_time(self):
-        fmt = self.format
+        fmt = self._format
         if fmt == "v17":
-            time = self._parse_time(self.data["dat_timesteps"].flatten(), fmt)
+            time = self._parse_time(self._raw_matlab_data["dat_timesteps"].flatten(), fmt)
 
         elif fmt == "v12":
-            time = self._parse_time(self.data["DS_19_12_ndaysens"].flatten(), fmt)
+            time = self._parse_time(self._raw_matlab_data["DS_19_12_ndaysens"].flatten(), fmt)
         
         elif fmt == "v13":
             time = self._parse_time(None, fmt)
 
         elif fmt == "v11":
-            time = self._parse_time(self.data['sens'], fmt)
+            time = self._parse_time(self._raw_matlab_data['sens'], fmt)
 
         else:
             raise ValueError(f"Unsupported format {fmt} for time parsing.")
         return time
     
     def _add_data_and_coords(self):
-        fmt = self.format
+        fmt = self._format
         data_vars = {}
         coords = {}
         time = self._add_time()
 
         if fmt == "v17":
-            depth_bins = self.data['dat_binrange'].flatten()
+            depth_bins = self._raw_matlab_data['dat_binrange'].flatten()
             coords = {
             "time": time,
             "bin": depth_bins,
         }
             data_vars = {
-                ctdparams.EAST_VELOCITY: (("time", "bin"), self.data["dat_u"]),
-                ctdparams.NORTH_VELOCITY: (("time", "bin"), self.data["dat_v"]),
-                ctdparams.UP_VELOCITY: (("time", "bin"), self.data["dat_w"]),
-                ctdparams.TEMPERATURE: (("time"), self.data['dat_t'].flatten()),
-                ctdparams.ECHO_INTENSITY: (("time", "bin"), self.data['dat_echoa']),
-                ctdparams.CORRELATION: (("time", "bin"), self.data['dat_corra']), 
-                ctdparams.PITCH: (("time"), self.data['dat_pitch'].flatten()),
-                ctdparams.ROLL: (("time"), self.data['dat_roll'].flatten()),
-                ctdparams.HEADING: (("time"), self.data['dat_head'].flatten()),
-                ctdparams.BATTERY_VOLTAGE: (("time"), self.data['dat_batt'].flatten()),
+                ctdparams.EAST_VELOCITY: (("time", "bin"), self._raw_matlab_data["dat_u"]),
+                ctdparams.NORTH_VELOCITY: (("time", "bin"), self._raw_matlab_data["dat_v"]),
+                ctdparams.UP_VELOCITY: (("time", "bin"), self._raw_matlab_data["dat_w"]),
+                ctdparams.TEMPERATURE: (("time"), self._raw_matlab_data['dat_t'].flatten()),
+                ctdparams.ECHO_INTENSITY: (("time", "bin"), self._raw_matlab_data['dat_echoa']),
+                ctdparams.CORRELATION: (("time", "bin"), self._raw_matlab_data['dat_corra']), 
+                ctdparams.PITCH: (("time"), self._raw_matlab_data['dat_pitch'].flatten()),
+                ctdparams.ROLL: (("time"), self._raw_matlab_data['dat_roll'].flatten()),
+                ctdparams.HEADING: (("time"), self._raw_matlab_data['dat_head'].flatten()),
+                ctdparams.BATTERY_VOLTAGE: (("time"), self._raw_matlab_data['dat_batt'].flatten()),
             }
         
         elif fmt == "v13":
             
             bin1_mid = np.squeeze(self.data.get("RDIBin1Mid", [np.nan]))
             bin_size = np.squeeze(self.data.get("RDIBinSize", [np.nan]))
-            num_bins = self.data['SerBins'].shape[1]
+            num_bins = self._raw_matlab_data['SerBins'].shape[1]
             depth = bin1_mid + bin_size * np.arange(num_bins)
             
             coords = {
@@ -166,48 +195,48 @@ class AdcpMatlabUhhdsReader(AbstractReader):
         }
             
             data_vars = {
-                ctdparams.EAST_VELOCITY: (("time", "bin"), self.data['SerEmmpersec'] / 1000),  # mm/s to m/s
-                ctdparams.NORTH_VELOCITY: (("time", "bin"), self.data['SerNmmpersec'] / 1000),
-                ctdparams.UP_VELOCITY: (("time", "bin"), self.data['SerVmmpersec'] / 1000),
-                ctdparams.TEMPERATURE: (("time"), self.data['AnT100thDeg'].flatten() / 100),
-                ctdparams.ECHO_INTENSITY: (("time", "bin"), self.data['SerEA1cnt']),
-                ctdparams.CORRELATION: (("time", "bin"), self.data['SerC1cnt']),
-                ctdparams.DIRECTION: (("time", "bin"), self.data['SerDir10thDeg'] / 10),  # 10th degrees to degrees
-                ctdparams.MAGNITUDE: (("time", "bin"), self.data['SerMagmmpersec'] / 1000),
-                ctdparams.PITCH: (("time"), self.data['AnP100thDeg'].flatten() / 100),
-                ctdparams.ROLL: (("time"), self.data['AnR100thDeg'].flatten() / 100),
-                ctdparams.HEADING: (("time"), self.data['AnH100thDeg'].flatten() / 100),
-                ctdparams.BATTERY_VOLTAGE: (("time"), self.data['AnBatt'].flatten() / 10),  # Tenths of volts
+                ctdparams.EAST_VELOCITY: (("time", "bin"), self._raw_matlab_data['SerEmmpersec'] / 1000),  # mm/s to m/s
+                ctdparams.NORTH_VELOCITY: (("time", "bin"), self._raw_matlab_data['SerNmmpersec'] / 1000),
+                ctdparams.UP_VELOCITY: (("time", "bin"), self._raw_matlab_data['SerVmmpersec'] / 1000),
+                ctdparams.TEMPERATURE: (("time"), self._raw_matlab_data['AnT100thDeg'].flatten() / 100),
+                ctdparams.ECHO_INTENSITY: (("time", "bin"), self._raw_matlab_data['SerEA1cnt']),
+                ctdparams.CORRELATION: (("time", "bin"), self._raw_matlab_data['SerC1cnt']),
+                ctdparams.DIRECTION: (("time", "bin"), self._raw_matlab_data['SerDir10thDeg'] / 10),  # 10th degrees to degrees
+                ctdparams.MAGNITUDE: (("time", "bin"), self._raw_matlab_data['SerMagmmpersec'] / 1000),
+                ctdparams.PITCH: (("time"), self._raw_matlab_data['AnP100thDeg'].flatten() / 100),
+                ctdparams.ROLL: (("time"), self._raw_matlab_data['AnR100thDeg'].flatten() / 100),
+                ctdparams.HEADING: (("time"), self._raw_matlab_data['AnH100thDeg'].flatten() / 100),
+                ctdparams.BATTERY_VOLTAGE: (("time"), self._raw_matlab_data['AnBatt'].flatten() / 10),  # Tenths of volts
         }
             
     
         elif fmt == "v12":
 
-            depth_bins = self.data['DS_19_12_binrange'].flatten()
+            depth_bins = self._raw_matlab_data['DS_19_12_binrange'].flatten()
             coords = {
             "time": time,
             "bin": depth_bins,
         }
             
             data_vars = {
-                ctdparams.EAST_VELOCITY: (("time", "bin"), self.data['DS_19_12_u']),
-                ctdparams.NORTH_VELOCITY: (("time", "bin"), self.data['DS_19_12_v']),
-                ctdparams.UP_VELOCITY: (("time", "bin"), self.data['DS_19_12_w']),
-                ctdparams.TEMPERATURE: (("time"), self.data['DS_19_12_t'].flatten()),
-                ctdparams.ECHO_INTENSITY: (("time", "bin"), self.data['DS_19_12_echoa']),
-                ctdparams.CORRELATION: (("time", "bin"), self.data['DS_19_12_corra']),
-                ctdparams.PITCH: (("time"), self.data['DS_19_12_pitch'].flatten()),
-                ctdparams.ROLL: (("time"), self.data['DS_19_12_roll'].flatten()),
-                ctdparams.HEADING: (("time"), self.data['DS_19_12_head'].flatten()),
-                ctdparams.BATTERY_VOLTAGE: (("time"), self.data['DS_19_12_batt'].flatten()),
+                ctdparams.EAST_VELOCITY: (("time", "bin"), self._raw_matlab_data['DS_19_12_u']),
+                ctdparams.NORTH_VELOCITY: (("time", "bin"), self._raw_matlab_data['DS_19_12_v']),
+                ctdparams.UP_VELOCITY: (("time", "bin"), self._raw_matlab_data['DS_19_12_w']),
+                ctdparams.TEMPERATURE: (("time"), self._raw_matlab_data['DS_19_12_t'].flatten()),
+                ctdparams.ECHO_INTENSITY: (("time", "bin"), self._raw_matlab_data['DS_19_12_echoa']),
+                ctdparams.CORRELATION: (("time", "bin"), self._raw_matlab_data['DS_19_12_corra']),
+                ctdparams.PITCH: (("time"), self._raw_matlab_data['DS_19_12_pitch'].flatten()),
+                ctdparams.ROLL: (("time"), self._raw_matlab_data['DS_19_12_roll'].flatten()),
+                ctdparams.HEADING: (("time"), self._raw_matlab_data['DS_19_12_head'].flatten()),
+                ctdparams.BATTERY_VOLTAGE: (("time"), self._raw_matlab_data['DS_19_12_batt'].flatten()),
         }
 
         elif fmt == "v11":
             
-            sens_struct = self.data['sens']
+            sens_struct = self._raw_matlab_data['sens']
             if isinstance(sens_struct, np.ndarray):
                 sens_struct = sens_struct[0, 0]  # unwrap from ndarray container
-            wt_struct = self.data['wt']
+            wt_struct = self._raw_matlab_data['wt']
             if isinstance(wt_struct, np.ndarray):
                 wt_struct = wt_struct[0, 0]
 
@@ -252,14 +281,14 @@ class AdcpMatlabUhhdsReader(AbstractReader):
             "source": "Acoustic Doppler Current Profiler",
         })
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'adcp-matlab-uhhds'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'ADCP Matlab UHH DS'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

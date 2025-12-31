@@ -13,9 +13,32 @@ from seasenselib.readers.base import AbstractReader
 class SbeAsciiReader(AbstractReader):
     """Reads CTD data from a SeaBird ASCII file into an xarray Dataset."""
 
-    def __init__(self, input_file: str, mapping=None):
-        super().__init__(input_file, mapping)
-        self.file_path = input_file
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize SbeAsciiReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the ASCII file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def __extract_sample_interval(self, file_path):
@@ -124,19 +147,16 @@ class SbeAsciiReader(AbstractReader):
         sample_interval = self.__extract_sample_interval(self.input_file)
         instrument_type = self.__extract_instrument_type(self.input_file)
         ds = self.__create_xarray_dataset(df, metadata, sample_interval, instrument_type)
-        self.data = ds
+        self._data = ds
 
-    def get_data(self):
-        return self.data
-
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'sbe-ascii'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'SeaBird ASCII'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

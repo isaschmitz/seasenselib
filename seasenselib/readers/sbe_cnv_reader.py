@@ -42,18 +42,18 @@ class SbeCnvReader(AbstractReader):
     -------
     __init__(input_file, mapping=None, sanitize_input=True, fix_missing_coords=True):
         Initializes the CnvReader with the input file and configuration options.
-    get_data():
+    data():
         Returns the xarray Dataset containing the sensor data.
-    get_file_type():
-        Returns the type of the file being read, which is 'SBE CNV'.
-    get_file_extension():
+    format_name():
+        Returns the format of the file being read, which is 'SBE CNV'.
+    file_extension():
         Returns the file extension for this reader, which is '.cnv'.
     
     Examples
     --------
     >>> # Default behavior (auto-fix enabled)
     >>> reader = SbeCnvReader('mooring_data.cnv')
-    >>> ds = reader.get_data()
+    >>> ds = reader.data
     
     >>> # Disable automatic coordinate fixing
     >>> reader = SbeCnvReader('mooring_data.cnv', fix_missing_coords=False)
@@ -62,32 +62,17 @@ class SbeCnvReader(AbstractReader):
     >>> reader = SbeCnvReader('data.cnv', sanitize_input=False)
     """
 
-    def __init__(self, input_file, mapping=None, 
-                 input_header_file=None,
-                 perform_default_postprocessing=True, 
-                 rename_variables=True,
-                 assign_metadata=True, 
-                 sort_variables=True,
-                 sanitize_input=True,
-                 fix_missing_coords=True):
+    def __init__(self, input_file: str,
+                 sanitize_input: bool = True,
+                 fix_missing_coords: bool = True,
+                 mapping: dict | None = None,
+                 **kwargs):
         """Initialize SbeCnvReader with configuration options.
         
         Parameters
         ----------
         input_file : str
             Path to the CNV file.
-        mapping : dict, optional
-            Variable name mapping dictionary.
-        input_header_file : str, optional
-            Path to separate header file (if applicable).
-        perform_default_postprocessing : bool, default=True
-            Whether to perform default post-processing.
-        rename_variables : bool, default=True
-            Whether to rename variables to standard names.
-        assign_metadata : bool, default=True
-            Whether to assign CF-compliant metadata.
-        sort_variables : bool, default=True
-            Whether to sort variables alphabetically.
         sanitize_input : bool, default=True
             Whether to automatically fix known file format issues (e.g., trailing
             whitespace in start_time lines). When False, files with format issues
@@ -96,12 +81,25 @@ class SbeCnvReader(AbstractReader):
             Whether to automatically use default values for missing coordinates
             (e.g., 45° latitude for depth calculation). When False, missing
             coordinates will result in NaN values. CLI flag: --no-fix-coords
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
         """
-        super().__init__(input_file, mapping, input_header_file,
-                        perform_default_postprocessing, rename_variables,
-                        assign_metadata, sort_variables)
-        self.sanitize_input = sanitize_input
-        self.fix_missing_coords = fix_missing_coords
+        super().__init__(input_file, mapping, **kwargs)
+        self._sanitize_input = sanitize_input
+        self._fix_missing_coords = fix_missing_coords
         self.__read()
 
     def __get_scan_interval_in_seconds(self, string):
@@ -539,7 +537,6 @@ class SbeCnvReader(AbstractReader):
         
         if params.PRESSURE in xarray_data:
             lat = cnv.lat
-            lon = cnv.lon
             
             # Check if lat is None or NaN
             if lat is None or (isinstance(lat, float) and np.isnan(lat)):
@@ -550,7 +547,7 @@ class SbeCnvReader(AbstractReader):
             
             # Use default latitude if not available and fix_missing_coords is enabled
             if lat is None or (isinstance(lat, float) and np.isnan(lat)):
-                if self.fix_missing_coords:
+                if self._fix_missing_coords:
                     lat = 45.0
                     print(f"Warning: Latitude not found in CNV file '{self.input_file}'. "
                           f"Using default latitude of {lat}° for depth calculation. "
@@ -634,7 +631,7 @@ class SbeCnvReader(AbstractReader):
         import os
 
         # Sanitize the file if sanitize_input is enabled (fixes pycnv incompatibilities)
-        if self.sanitize_input:
+        if self._sanitize_input:
             file_to_read, was_sanitized = self._sanitize_cnv_file(self.input_file)
         else:
             file_to_read = self.input_file
@@ -707,7 +704,7 @@ class SbeCnvReader(AbstractReader):
             depth_data = self.__calculate_depth_from_pressure(xarray_data, xarray_labels, xarray_units, cnv)
             if depth_data is not None:
                 ds[params.DEPTH] = (["time"], depth_data)
-                if self.assign_metadata:
+                if self._config_assign_metadata:
                     self._assign_metadata_for_key_to_xarray_dataset(ds, params.DEPTH)
 
         # Derive oceanographic parameters (density, potential temperature)
@@ -720,7 +717,7 @@ class SbeCnvReader(AbstractReader):
                 ds[var] = ds[var].where(ds[var] != bad_flag, np.nan)
 
         # Store processed data
-        self.data = ds
+        self._data = ds
 
         # Clean up temporary sanitized file after all processing is complete
         if was_sanitized and os.path.exists(file_to_read):
@@ -729,14 +726,14 @@ class SbeCnvReader(AbstractReader):
             except Exception as e:
                 print(f"Warning: Could not delete temporary file {file_to_read}: {e}")
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'sbe-cnv'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'SeaBird CNV'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return '.cnv'

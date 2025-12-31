@@ -28,12 +28,15 @@ class AbstractReader(ABC):
     
     Attributes
     ---------- 
-    input_file : str
+    input_file : str (read-only property)
         The path to the input file containing sensor data.
-    data : xr.Dataset | None
-        The processed sensor data as a xarray Dataset, or None if not yet processed.
-    mapping : dict, optional
+    input_header_file : str | None (read-only property)
+        The path to separate header file, or None if not applicable.
+    mapping : dict (read-only property)
         A dictionary mapping names used in the input file to standard names.
+    data : xr.Dataset | None (read-only property)
+        The processed sensor data as a xarray Dataset, or None if not yet processed.
+        This is a read-only property. Use :meth:`get_data()` for backward compatibility.
     perform_default_postprocessing : bool
         Whether to perform default post-processing on the data.
     rename_variables : bool
@@ -53,25 +56,14 @@ class AbstractReader(ABC):
     _perform_default_postprocessing(ds: xr.Dataset) -> xr.Dataset
             Performs default post-processing on the xarray Dataset.
     get_data() -> xr.Dataset | None
-            Returns the processed data as an xarray Dataset.
+            Returns the processed data as an xarray Dataset (deprecated, use `data` property).
     """
-
-    # Attribute which indicates whether to perform default post-processing
-    perform_default_postprocessing = True
-
-    # Attribute to indicate whether to rename xarray variables to standard names
-    rename_variables = True
-
-    # Attribute to indicate whether to assign CF metadata to xarray variables
-    assign_metadata = True
-
-    # Attribute to indicate whether to sort xarray variables by name
-    sort_variables = True
 
     def __init__(self, input_file: str, mapping: dict | None = None,
                  input_header_file: str | None = None,
                  perform_default_postprocessing: bool = True, rename_variables: bool = True,
-                 assign_metadata: bool = True, sort_variables: bool = True):
+                 assign_metadata: bool = True, sort_variables: bool = True,
+                 **kwargs):
         """Initializes the AbstractReader with the input file and optional mapping.
 
         This constructor sets the input file, initializes the data attribute to None,
@@ -85,6 +77,8 @@ class AbstractReader(ABC):
             The path to the input file containing sensor data.
         mapping : dict, optional
             A dictionary mapping names used in the input file to standard names.
+        input_header_file : str, optional
+            The path to separate header file, or None if not applicable.
         perform_default_postprocessing : bool, optional
             Whether to perform default post-processing on the data. Default is True.
         rename_variables : bool, optional
@@ -93,16 +87,54 @@ class AbstractReader(ABC):
             Whether to assign CF metadata to xarray variables. Default is True.
         sort_variables : bool, optional
             Whether to sort xarray variables by name. Default is True.
+        **kwargs
+            Additional reader-specific parameters. These are accepted but not used
+            by the base class, allowing subclasses to define their own parameters
+            without modifying the base class signature.
         """
 
-        self.input_file = input_file
-        self.input_header_file = input_header_file
-        self.data = None
-        self.mapping = mapping if mapping is not None else {}
-        self.perform_default_postprocessing = perform_default_postprocessing
-        self.rename_variables = rename_variables
-        self.assign_metadata = assign_metadata
-        self.sort_variables = sort_variables
+        self._input_file = input_file
+        self._input_header_file = input_header_file
+        self._data = None
+        self._mapping = mapping if mapping is not None else {}
+        self._config_perform_postprocessing = perform_default_postprocessing
+        self._config_rename_variables = rename_variables
+        self._config_assign_metadata = assign_metadata
+        self._config_sort_variables = sort_variables
+        # **kwargs is intentionally not stored - subclasses handle their own parameters
+
+    @property
+    def input_file(self) -> str:
+        """Get the input file path (read-only).
+        
+        Returns
+        -------
+        str
+            Path to the input data file
+        """
+        return self._input_file
+
+    @property
+    def input_header_file(self) -> str | None:
+        """Get the input header file path (read-only).
+        
+        Returns
+        -------
+        str | None
+            Path to the separate header file, or None if not applicable
+        """
+        return self._input_header_file
+
+    @property
+    def mapping(self) -> dict:
+        """Get the variable name mapping (read-only).
+        
+        Returns
+        -------
+        dict
+            Dictionary mapping custom variable names to standard names
+        """
+        return self._mapping
 
     def _julian_to_gregorian(self, julian_days, start_date):
         full_days = int(julian_days) - 1  # Julian days start at 1, not 0
@@ -237,7 +269,7 @@ class AbstractReader(ABC):
                 ds[temperature_var].values, 
                 ds[pressure_var].values))
             
-            if self.assign_metadata:
+            if self._config_assign_metadata:
                 # Assign metadata for derived parameters
                 self._assign_metadata_for_key_to_xarray_dataset(ds, params.DENSITY)
                 self._assign_metadata_for_key_to_xarray_dataset(ds, params.POTENTIAL_TEMPERATURE)
@@ -339,7 +371,7 @@ class AbstractReader(ABC):
         module_version = version(MODULE_NAME)
         module_reader_class = self.__class__.__name__
         python_version = platform.python_version()
-        input_file = self.input_file
+        input_file = self._input_file
         input_file_type = self.format_name()
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -380,17 +412,17 @@ class AbstractReader(ABC):
         """
 
         # Apply custom mapping of variable names if provided
-        if self.mapping is not None:
-            for key, value in self.mapping.items():
+        if self._mapping is not None:
+            for key, value in self._mapping.items():
                 if value in ds.variables:
                     ds = ds.rename({value: key})
 
         # Rename variables according to default mappings
-        if self.rename_variables:
+        if self._config_rename_variables:
             ds = self._rename_xarray_parameters(ds)
 
         # Assign metadata for all attributes of the xarray Dataset
-        if self.assign_metadata:
+        if self._config_assign_metadata:
             for key in (list(ds.data_vars.keys()) + list(ds.coords.keys())):
                 self._assign_metadata_for_key_to_xarray_dataset(ds, key)
 
@@ -398,18 +430,49 @@ class AbstractReader(ABC):
         ds = self._assign_default_global_attributes(ds)
 
         # Sort variables and coordinates by name
-        if self.sort_variables:
+        if self._config_sort_variables:
             ds = self._sort_xarray_variables(ds)
 
-        return ds   
+        return ds
+
+    @property
+    def data(self) -> xr.Dataset | None:
+        """Get the processed sensor data as an xarray Dataset.
+        
+        This property provides read-only access to the data that was read
+        from the input file and processed by the reader.
+        
+        Returns
+        -------
+        xr.Dataset | None
+            The processed sensor data, or None if not yet read.
+        """
+        return self._data
 
     def get_data(self) -> xr.Dataset | None:
-        """ Returns the processed data as an xarray Dataset. """
+        """Returns the processed data as an xarray Dataset.
+        
+        .. deprecated:: 1.5
+            Use the :attr:`data` property instead: ``reader.data``
+            This method will be removed in version 2.0.
+            
+        Returns
+        -------
+        xr.Dataset | None
+            The processed sensor data, or None if not yet read.
+        """
+        import warnings
+        warnings.warn(
+            "get_data() is deprecated and will be removed in version 2.0. "
+            "Use the 'data' property instead: reader.data",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return self.data
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def format_name() -> str:
+    def format_name(cls) -> str:
         """Get the format name for this reader.
 
         This property must be implemented by all subclasses.
@@ -426,9 +489,9 @@ class AbstractReader(ABC):
         """
         raise NotImplementedError("Reader classes must define a format name")
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def format_key() -> str:
+    def format_key(cls) -> str:
         """Get the format key for this reader.
 
         This property must be implemented by all subclasses.
@@ -445,9 +508,9 @@ class AbstractReader(ABC):
         """
         raise NotImplementedError("Writer classes must define a format key")
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def file_extension() -> str | None:
+    def file_extension(cls) -> str | None:
         """Get the file extension for this reader.
 
         This property must be implemented by all subclasses.

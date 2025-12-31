@@ -35,38 +35,39 @@ class JsonReader(AbstractReader):
         input_file : str
             Path to the JSON data file
         """
-        self.input_file = Path(input_file)
-        self._data = None
+        super().__init__(input_file)
         self._validate_file()
         self._read_json_file()
 
     def _validate_file(self):
         """Validate that the input file exists and is readable."""
-        if not self.input_file.exists():
+        file_path = Path(self.input_file)
+        
+        if not file_path.exists():
             raise FileNotFoundError(f"File not found: {self.input_file}")
 
-        if not self.input_file.is_file():
+        if not file_path.is_file():
             raise ValueError(f"Not a file: {self.input_file}")
 
-        if self.input_file.suffix.lower() != '.json':
-            raise ValueError(f"Expected .json file, got: {self.input_file.suffix}")
+        if file_path.suffix.lower() != '.json':
+            raise ValueError(f"Expected .json file, got: {file_path.suffix}")
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         """Return the unique format identifier."""
         return "example-json"
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         """Return the human-readable format name."""
         return "Example JSON Format"
 
-    @staticmethod
-    def file_extension() -> str:
+    @classmethod
+    def file_extension(cls) -> str:
         """Return the file extension for this format."""
         return ".json"
 
-    def get_data(self) -> xr.Dataset:
+    def get_data(self) -> xr.Dataset | None:
         """
         Read JSON data and return as xarray Dataset.
         
@@ -81,7 +82,7 @@ class JsonReader(AbstractReader):
             If the JSON structure is invalid
         """
         if self.data is None:
-            self.data = self._read_json_file()
+            self._data = self._read_json_file()
         return self.data
 
     def _read_json_file(self) -> xr.Dataset:
@@ -157,6 +158,6 @@ class JsonReader(AbstractReader):
         ds = self._perform_default_postprocessing(ds)
 
         # Store processed data
-        self.data = ds
+        self._data = ds
 
         return ds

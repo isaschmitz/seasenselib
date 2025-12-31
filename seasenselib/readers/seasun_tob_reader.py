@@ -34,19 +34,49 @@ class SeasunTobReader(AbstractReader):
         Initializes the TobReader with the input file, optional mapping, and encoding.
     __read():
         Reads the TOB file, processes the data, and creates an xarray Dataset.
-    get_data():
+    
+    Properties
+    ----------
+    data : xr.Dataset (read-only)
         Returns the xarray Dataset containing the sensor data.
-    get_file_type():
-        Returns the type of the file being read, which is 'Sea & Sun TOB'.
-    get_file_extension():
+        For backward compatibility, get_data() method is also available but deprecated.
+    format_name():
+        Returns the format of the file being read, which is 'Sea & Sun TOB'.
+    file_extension():
         Returns the file extension for this reader, which is '.tob'.
     
     """
 
-    def __init__(self, input_file, mapping = None, encoding = 'latin-1'):
-        """ Initializes the SeasunTobReader with the input file, optional mapping, and encoding."""
-        super().__init__(input_file, mapping)
-        self.encoding = encoding
+    def __init__(self, input_file: str,
+                 encoding: str = 'latin-1',
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize SeasunTobReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the TOB file.
+        encoding : str, default='latin-1'
+            Character encoding of the input file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(input_file, mapping, **kwargs)
+        self._encoding = encoding
         self.__read()
 
     def __read(self):
@@ -60,7 +90,7 @@ class SeasunTobReader(AbstractReader):
         import gsw
 
         # Read the file
-        with open(self.input_file, 'r', encoding=self.encoding) as file:
+        with open(self.input_file, 'r', encoding=self._encoding) as file:
             lines = file.readlines()
 
         # Find the line with column names
@@ -85,7 +115,7 @@ class SeasunTobReader(AbstractReader):
             delim_whitespace=True,
             names=column_names,
             parse_dates={params.TIME: ['IntD', 'IntT']},
-            encoding=self.encoding,
+            encoding=self._encoding,
         )
 
         # Convert DataFrame to xarray dataset
@@ -122,16 +152,16 @@ class SeasunTobReader(AbstractReader):
             super()._assign_metadata_for_key_to_xarray_dataset( ds, key)
 
         # Store processed data
-        self.data = ds
+        self._data = ds
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'seasun-tob'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'Sea & Sun TOB'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return '.tob'

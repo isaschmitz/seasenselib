@@ -39,17 +39,44 @@ class NortekAsciiReader(AbstractReader):
         Converts the DataFrame to an xarray Dataset, renaming columns and assigning units.
     __read():
         Reads the .dat and .hdr files, processes the data, and creates an xarray Dataset.
-    get_data():
+    
+    Properties
+    ----------
+    data : xr.Dataset (read-only)
         Returns the xarray Dataset containing the sensor data.
+        For backward compatibility, get_data() method is also available but deprecated.
+    
     file_type : str
         A string indicating the type of file being read, in this case, 'Nortek ASCII'.
     """
 
-    def __init__(self, dat_file_path, header_file_path):
-        """Initializes the NortekAsciiReader with the paths to the .dat and .hdr files."""
-        super().__init__(dat_file_path, None, input_header_file=header_file_path)
-        self.dat_file_path = dat_file_path
-        self.header_file_path = header_file_path
+    def __init__(self, dat_file_path: str,
+                 header_file_path: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize NortekAsciiReader.
+        
+        Parameters
+        ----------
+        dat_file_path : str
+            Path to the .dat file.
+        header_file_path : str
+            Path to the .hdr file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(dat_file_path, mapping, input_header_file=header_file_path, **kwargs)
         self.__read()
 
     def __read_header(self, hdr_file_path):
@@ -134,19 +161,19 @@ class NortekAsciiReader(AbstractReader):
         return ds
 
     def __read(self):
-        headers = self.__read_header(self.header_file_path)
-        data = self.__parse_data(self.dat_file_path, headers)
+        headers = self.__read_header(self.input_header_file)
+        data = self.__parse_data(self.input_file, headers)
         ds = self.__create_xarray_dataset(data, headers)
-        self.data = ds
+        self._data = ds
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'nortek-ascii'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'Nortek ASCII'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

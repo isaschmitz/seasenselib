@@ -6,7 +6,6 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 import csv
-import xarray as xr
 import seasenselib.parameters as params
 from .base import AbstractReader
 
@@ -33,16 +32,45 @@ class CsvReader(AbstractReader):
         Initializes the CsvReader with the input file and optional mapping.
     __read()
         Reads the CSV file and processes the data into an xarray Dataset.
-    get_data()
+    
+    Properties
+    ----------
+    data : xr.Dataset (read-only)
         Returns the xarray Dataset containing the sensor data.
+        For backward compatibility, get_data() method is also available but deprecated.
+    
     get_file_type()
         Returns the type of the file being read, which is 'CSV'.
     get_file_extension()
         Returns the file extension for this reader, which is '.csv'.
     """
 
-    def __init__(self, input_file: str, mapping: dict | None = None):
-        super().__init__(input_file, mapping)
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize CsvReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the CSV file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def __read(self):
@@ -86,16 +114,16 @@ class CsvReader(AbstractReader):
                 super()._assign_metadata_for_key_to_xarray_dataset( ds, key )
     
             # Store processed data
-            self.data = ds
+            self._data = ds
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'csv'
     
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'CSV'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return '.csv'

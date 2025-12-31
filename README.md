@@ -81,7 +81,7 @@ import seasenselib as ssl
 
 # Read CTD data from CNV file
 reader = ssl.readers.SbeCnvReader("profile.cnv")
-ds = reader.get_data()
+ds = reader.data
 
 # Write dataset with CTD data to netCDF file
 writer = ssl.writers.NetCdfWriter(ds)
@@ -259,8 +259,8 @@ seasenselib convert -i data.myf -o output.nc
 
 Your plugin must:
 - Inherit from `AbstractReader`, `AbstractWriter`, or `AbstractPlotter`
-- Implement `format_key()` and `format_name()` static methods
-- Implement required instance methods (`get_data()` or `write()`)
+- Implement `format_key()` and `format_name()` class methods (using `@classmethod`)
+- Provide a `data` property (for readers) or `write()` method (for writers)
 
 ### Resources
 

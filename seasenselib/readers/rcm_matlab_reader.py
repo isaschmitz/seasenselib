@@ -10,8 +10,32 @@ from seasenselib.readers.base import AbstractReader
 class RcmMatlabReader(AbstractReader):
     """Reader which converts RCM data stored in MATLAB .mat files into xarray dataset."""
 
-    def __init__(self, input_file, mapping=None):
-        super().__init__(input_file, mapping)
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize RcmMatlabReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the MAT file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def __parse_data(self, mat_file_path):
@@ -97,19 +121,16 @@ class RcmMatlabReader(AbstractReader):
     def __read(self):
         data = self.__parse_data(self.input_file)
         ds = self.__create_xarray_dataset(data)
-        self.data = ds
+        self._data = ds
 
-    def get_data(self) -> xr.Dataset:
-        return self.data
-
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'rcm-matlab'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'RCM Matlab'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

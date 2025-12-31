@@ -33,7 +33,12 @@ def read(filename: str, file_format: Optional[str] = None,
     header_file : str, optional
         Path to header file (required for Nortek ASCII files)
     **kwargs
-        Additional arguments passed to the specific writer
+        Additional reader-specific parameters. Examples:
+        - sanitize_input : bool (for SBE CNV files, default=True)
+        - fix_missing_coords : bool (for SBE CNV files, default=True)
+        - encoding : str (for Sea&Sun TOB files, default='latin-1')
+        - time_dim : str (for ADCP readers, default='time')
+        - mapping : dict (variable name mapping for all readers)
         
     Returns
     -------
@@ -185,15 +190,17 @@ def formats() -> List[Dict[str, str]]:
     -------
     List[Dict[str, str]]
         List of dictionaries containing format information with keys:
-        'name', 'key', 'extension', 'class_name'
+        'name', 'key', 'class_name', 'extension', 'is_plugin'
+        Note: 'extension' is always present (None if not applicable)
         
     Examples
     --------
     ```python
     import seasenselib as ssl
     formats = ssl.formats()
-    for format in formats:
-        print(f"{format['name']}: '{format['key']}' ({format['extension']})")
+    for fmt in formats:
+        ext = fmt['extension'] or 'N/A'
+        print(f"{fmt['name']}: '{fmt['key']}' ({ext})")
     ```
     """
     return list_readers()
@@ -210,7 +217,8 @@ def list_readers() -> List[Dict[str, str]]:
     -------
     List[Dict[str, str]]
         List of dictionaries containing reader information with keys:
-        'name', 'key', 'extension', 'class_name', 'is_plugin'
+        'name', 'key', 'class_name', 'extension', 'is_plugin'
+        Note: 'extension' is always present (None if not applicable)
         
     Examples
     --------
@@ -239,7 +247,8 @@ def list_writers() -> List[Dict[str, str]]:
     -------
     List[Dict[str, str]]
         List of dictionaries containing writer information with keys:
-        'name', 'key', 'extension', 'class_name', 'is_plugin'
+        'name', 'key', 'class_name', 'extension', 'is_plugin'
+        Note: 'extension' is always present (None if not applicable)
         
     Examples
     --------
@@ -269,6 +278,7 @@ def list_plotters() -> List[Dict[str, str]]:
     List[Dict[str, str]]
         List of dictionaries containing plotter information with keys:
         'name', 'key', 'class_name', 'is_plugin'
+        Note: Plotters don't have 'extension' (only readers/writers do)
         
     Examples
     --------

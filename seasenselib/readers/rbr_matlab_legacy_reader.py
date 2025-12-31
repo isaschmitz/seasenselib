@@ -13,20 +13,47 @@ from seasenselib.readers.base import AbstractReader
 class RbrMatlabLegacyReader(AbstractReader):
     """Reader which converts RBR data stored in MATLAB .mat files into an xarray Dataset."""
 
-    def __init__(self, input_file, mapping=None, time_dim: str = "time"):
-        self.time_dim = time_dim
+    def __init__(self, input_file: str,
+                 time_dim: str = "time",
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize RbrMatlabLegacyReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the MAT file.
+        time_dim : str, default="time"
+            Name of the time dimension in the output dataset.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        self._time_dim = time_dim
         # side-info captured during parse
-        self.serial_number = None
-        self.start_date = None
-        self.end_date = None
-        self.comment = ""
-        self.latitude = None
-        self.longitude = None
-        self.coefficients = []
+        self._serial_number = None
+        self._start_date = None
+        self._end_date = None
+        self._comment = ""
+        self._latitude = None
+        self._longitude = None
+        self._coefficients = []
         # Channel information for multi-parameter support
-        self.channel_names = []
-        self.channel_units = []
-        super().__init__(input_file, mapping)
+        self._channel_names = []
+        self._channel_units = []
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     # ---------- internals ----------
@@ -60,9 +87,9 @@ class RbrMatlabLegacyReader(AbstractReader):
         # --- Serial number from the end of the 'name' field ---
         try:
             name_str = str(getattr(RBR, "name", "")).strip()
-            self.serial_number = name_str.split()[-1] if name_str else None
+            self._serial_number = name_str.split()[-1] if name_str else None
         except Exception:
-            self.serial_number = None
+            self._serial_number = None
 
         # Start / end times as numpy datetime64
 
@@ -81,21 +108,21 @@ class RbrMatlabLegacyReader(AbstractReader):
             # If all fails, raise error
             raise ValueError(f"Could not parse date string: {s}")
 
-        self.start_date = _parse_start_end(RBR.starttime)
-        self.end_date   = _parse_start_end(RBR.endtime)
+        self._start_date = _parse_start_end(RBR.starttime)
+        self._end_date   = _parse_start_end(RBR.endtime)
 
         # Events → comment (string)
         events_arr = np.atleast_1d(getattr(RBR, "events", []))
-        self.comment = "; ".join(map(str, events_arr)) if events_arr.size else ""
+        self._comment = "; ".join(map(str, events_arr)) if events_arr.size else ""
 
         # Lat/Lon from nested parameters struct (optional)
         params = getattr(RBR, "parameters", None)
-        self.latitude = getattr(params, "latitude", None) if params is not None else None
-        self.longitude = getattr(params, "longitude", None) if params is not None else None
+        self._latitude = getattr(params, "latitude", None) if params is not None else None
+        self._longitude = getattr(params, "longitude", None) if params is not None else None
 
         # Coefficients (store on the temperature variable later)
         coeff = np.atleast_1d(getattr(RBR, "coefficients", []))
-        self.coefficients = coeff.astype(float).tolist() if coeff.size else []
+        self._coefficients = coeff.astype(float).tolist() if coeff.size else []
 
         # ---- sample times (cell array of strings) → datetime64 ----
         # Examples like: '12/08/2018 12:00:00.000 PM' or without milliseconds
@@ -158,11 +185,11 @@ class RbrMatlabLegacyReader(AbstractReader):
             df_data[clean_name] = data[:, i]
         
         df = pd.DataFrame(df_data, index=times)
-        df.index.name = self.time_dim
+        df.index.name = self._time_dim
         
         # Store channel information for later use
-        self.channel_names = channel_names
-        self.channel_units = channel_units
+        self._channel_names = channel_names
+        self._channel_units = channel_units
         
         return df
 
@@ -207,17 +234,17 @@ class RbrMatlabLegacyReader(AbstractReader):
         """Create an xarray Dataset and attach metadata for all parameters."""
         # Create data variables for each column in the DataFrame
         data_vars = {}
-        coords = {self.time_dim: df.index.values.astype("datetime64[ns]")}
+        coords = {self._time_dim: df.index.values.astype("datetime64[ns]")}
         
         for i, col in enumerate(df.columns):
             # Get original channel name and units
-            original_name = self.channel_names[i] if i < len(self.channel_names) else col
-            units = (self.channel_units[i] if i < len(self.channel_units) else '')
+            original_name = self._channel_names[i] if i < len(self._channel_names) else col
+            units = (self._channel_units[i] if i < len(self._channel_units) else '')
             
             # Create DataArray for this parameter
             data_vars[col] = xr.DataArray(
                 df[col].to_numpy(),
-                dims=[self.time_dim],
+                dims=[self._time_dim],
                 attrs={
                     "units": units,
                     "long_name": original_name,
@@ -226,8 +253,8 @@ class RbrMatlabLegacyReader(AbstractReader):
             )
             
             # Add coefficients to first parameter (legacy behavior)
-            if i == 0 and self.coefficients:
-                data_vars[col].attrs["coefficients"] = self.coefficients
+            if i == 0 and self._coefficients:
+                data_vars[col].attrs["coefficients"] = self._coefficients
 
         # Create Dataset
         ds = xr.Dataset(
@@ -237,19 +264,19 @@ class RbrMatlabLegacyReader(AbstractReader):
                 "Conventions": "CF-1.8",
                 "title": "RBR oceanographic data",
                 "source": "RBR instrument (legacy MATLAB export)",
-                "rbr_serial_number": self.serial_number,
-                "rbr_start_date": self.start_date,
-                "rbr_end_date": self.end_date,
+                "rbr_serial_number": self._serial_number,
+                "rbr_start_date": self._start_date,
+                "rbr_end_date": self._end_date,
             },
         )
 
         # Optional global attrs
-        if self.comment:
-            ds.attrs["comment"] = self.comment
-        if self.latitude is not None:
-            ds.attrs["latitude"] = float(self.latitude)
-        if self.longitude is not None:
-            ds.attrs["longitude"] = float(self.longitude)
+        if self._comment:
+            ds.attrs["comment"] = self._comment
+        if self._latitude is not None:
+            ds.attrs["latitude"] = float(self._latitude)
+        if self._longitude is not None:
+            ds.attrs["longitude"] = float(self._longitude)
 
         # Let base class attach any mapped metadata
         for key in list(ds.data_vars.keys()) + list(ds.coords.keys()):
@@ -262,21 +289,18 @@ class RbrMatlabLegacyReader(AbstractReader):
 
     def __read(self):
         df = self.__parse_data(self.input_file)
-        self.data = self.__create_xarray_dataset(df)
+        self._data = self.__create_xarray_dataset(df)
 
     # ------------ public API ------------
-    def get_data(self) -> xr.Dataset:
-        return self.data
-
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return "rbr-matlab-legacy"
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return "RBR Matlab Legacy"
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None
     

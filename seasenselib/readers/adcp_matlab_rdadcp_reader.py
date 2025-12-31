@@ -13,12 +13,44 @@ from seasenselib.readers.base import AbstractReader
 class AdcpMatlabRdadcpReader(AbstractReader):
     """Reader which converts ADCP data stored in MATLAB .mat files converted from binary with rdadcp into an xarray Dataset."""
 
-    def __init__(self, input_file, mapping=None, time_dim: str = "time",
-                 bin_dim: str = "bin", beam_dim: str = "beam"):
-        self.time_dim = time_dim
-        self.bin_dim = bin_dim
-        self.beam_dim = beam_dim
-        super().__init__(input_file, mapping)
+    def __init__(self, input_file: str,
+                 time_dim: str = "time",
+                 bin_dim: str = "bin",
+                 beam_dim: str = "beam",
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize AdcpMatlabRdadcpReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the MAT file.
+        time_dim : str, default="time"
+            Name of the time dimension in the output dataset.
+        bin_dim : str, default="bin"
+            Name of the bin dimension in the output dataset.
+        beam_dim : str, default="beam"
+            Name of the beam dimension in the output dataset.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        self._time_dim = time_dim
+        self._bin_dim = bin_dim
+        self._beam_dim = beam_dim
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     # ---------- helpers ----------
@@ -187,47 +219,47 @@ class AdcpMatlabRdadcpReader(AbstractReader):
         n_cells, nt = P["n_cells"], P["nt"]
 
         coords = {
-            self.time_dim: (self.time_dim, P["time"]),
-            self.bin_dim: (self.bin_dim, P["bin_idx"]),
-            "range": (self.bin_dim, P["ranges"]),  # cell-center distance from transducer [m]
+            self._time_dim: (self._time_dim, P["time"]),
+            self._bin_dim: (self._bin_dim, P["bin_idx"]),
+            "range": (self._bin_dim, P["ranges"]),  # cell-center distance from transducer [m]
         }
 
         # 2-D z coordinate (positive upward)
-        coords["z"] = ((self.bin_dim, self.time_dim), P["z_2d"])
+        coords["z"] = ((self._bin_dim, self._time_dim), P["z_2d"])
 
         ds = xr.Dataset(
             data_vars={
                 # velocities
-                "east_velocity": ((self.bin_dim, self.time_dim), P["east"]),
-                "north_velocity": ((self.bin_dim, self.time_dim), P["north"]),
-                "up_velocity": ((self.bin_dim, self.time_dim), P["vert"]),
+                "east_velocity": ((self._bin_dim, self._time_dim), P["east"]),
+                "north_velocity": ((self._bin_dim, self._time_dim), P["north"]),
+                "up_velocity": ((self._bin_dim, self._time_dim), P["vert"]),
 
-                # scalar series
-                "depth": (self.time_dim, P["depth_pd"]),           # positive down
-                "pressure": (self.time_dim, P["pressure"]),
-                "ensemble_number": (self.time_dim, P["number"]),
-                "heading": (self.time_dim, P["heading"]),
-                "pitch": (self.time_dim, P["pitch"]),
-                "roll": (self.time_dim, P["roll"]),
-                "heading_std": (self.time_dim, P["heading_std"]),
-                "pitch_std": (self.time_dim, P["pitch_std"]),
-                "roll_std": (self.time_dim, P["roll_std"]),
-                "temperature": (self.time_dim, P["temperature"]),
-                "salinity": (self.time_dim, P["salinity"]),
-                "pressure_std": (self.time_dim, P["pressure_std"]),
+                # 1-D sensor data
+                "depth": (self._time_dim, P["depth_pd"]),           # positive down
+                "pressure": (self._time_dim, P["pressure"]),
+                "ensemble_number": (self._time_dim, P["number"]),
+                "heading": (self._time_dim, P["heading"]),
+                "pitch": (self._time_dim, P["pitch"]),
+                "roll": (self._time_dim, P["roll"]),
+                "heading_std": (self._time_dim, P["heading_std"]),
+                "pitch_std": (self._time_dim, P["pitch_std"]),
+                "roll_std": (self._time_dim, P["roll_std"]),
+                "temperature": (self._time_dim, P["temperature"]),
+                "salinity": (self._time_dim, P["salinity"]),
+                "pressure_std": (self._time_dim, P["pressure_std"]),
 
                 # 3-D QA fields
-                "correlation_magnitude": ((self.bin_dim, self.beam_dim, self.time_dim), P["corr"]),
-                "echo_intensity": ((self.bin_dim, self.beam_dim, self.time_dim), P["intens"]),
-                "status": ((self.bin_dim, self.beam_dim, self.time_dim), P["status"]),
-                "percent_good": ((self.bin_dim, self.beam_dim, self.time_dim), P["perc_good"]),
+                "correlation_magnitude": ((self._bin_dim, self._beam_dim, self._time_dim), P["corr"]),
+                "echo_intensity": ((self._bin_dim, self._beam_dim, self._time_dim), P["intens"]),
+                "status": ((self._bin_dim, self._beam_dim, self._time_dim), P["status"]),
+                "percent_good": ((self._bin_dim, self._beam_dim, self._time_dim), P["perc_good"]),
 
                 # bottom track
-                "bt_range": ((self.beam_dim, self.time_dim), P["bt_range"]),
-                "bt_velocity": ((self.beam_dim, self.time_dim), P["bt_vel"]),
-                "bt_correlation": ((self.beam_dim, self.time_dim), P["bt_corr"]),
-                "bt_amplitude": ((self.beam_dim, self.time_dim), P["bt_ampl"]),
-                "bt_percent_good": ((self.beam_dim, self.time_dim), P["bt_perc_good"]),
+                "bt_range": ((self._beam_dim, self._time_dim), P["bt_range"]),
+                "bt_velocity": ((self._beam_dim, self._time_dim), P["bt_vel"]),
+                "bt_correlation": ((self._beam_dim, self._time_dim), P["bt_corr"]),
+                "bt_amplitude": ((self._beam_dim, self._time_dim), P["bt_ampl"]),
+                "bt_percent_good": ((self._beam_dim, self._time_dim), P["bt_perc_good"]),
             },
             coords=coords,
             attrs={
@@ -327,20 +359,17 @@ class AdcpMatlabRdadcpReader(AbstractReader):
 
     def __read(self):
         parsed = self.__parse(self.input_file)
-        self.data = self.__create_xarray_dataset(parsed)
+        self._data = self.__create_xarray_dataset(parsed)
 
     # ---------- public API ----------
-    def get_data(self) -> xr.Dataset:
-        return self.data
+    @classmethod
+    def format_key(cls) -> str:
+        return 'adcp-matlab-rdadcp'
 
-    @staticmethod
-    def format_key() -> str:
-        return "adcp-matlab-rdadcp"
-
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return "ADCP Matlab rdadcp"
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None
