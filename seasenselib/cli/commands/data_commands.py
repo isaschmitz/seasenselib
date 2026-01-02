@@ -30,8 +30,12 @@ class ConvertCommand(BaseCommand):
                             f"Allowed parameters are: {', '.join(allowed_parameters)}"
                         )
 
-            # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
+            # Read data with reader-specific kwargs
+            reader_kwargs = {
+                'sanitize_input': not getattr(args, "no_sanitize", False),
+                'fix_missing_coords': not getattr(args, "no_fix_coords", False)
+            }
+            data = self.io.read_data(args.input, args.input_format, args.header_input, **reader_kwargs)
 
             if not data:
                 raise ValidationError('No data found in file.')
@@ -52,8 +56,12 @@ class ShowCommand(BaseCommand):
     def execute(self, args: argparse.Namespace) -> CommandResult:
         """Execute show command."""
         try:
-            # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
+            # Read data with reader-specific kwargs
+            reader_kwargs = {
+                'sanitize_input': not getattr(args, "no_sanitize", False),
+                'fix_missing_coords': not getattr(args, "no_fix_coords", False)
+            }
+            data = self.io.read_data(args.input, args.input_format, args.header_input, **reader_kwargs)
 
             if not data:
                 raise ValidationError('No data found in file.')
@@ -83,8 +91,12 @@ class SubsetCommand(BaseCommand):
             # Lazy import processors
             from ...processors import SubsetProcessor
 
-            # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
+            # Read data with reader-specific kwargs
+            reader_kwargs = {
+                'sanitize_input': not getattr(args, "no_sanitize", False),
+                'fix_missing_coords': not getattr(args, "no_fix_coords", False)
+            }
+            data = self.io.read_data(args.input, args.input_format, args.header_input, **reader_kwargs)
 
             if not data:
                 raise ValidationError('No data found in file.')
@@ -132,8 +144,12 @@ class CalcCommand(BaseCommand):
             # Lazy import processors
             from ...processors import ResampleProcessor, StatisticsProcessor
             
-            # Read data
-            data = self.io.read_data(args.input, args.input_format, args.header_input, sanitize_input=not getattr(args, "no_sanitize", False), fix_missing_coords=not getattr(args, "no_fix_coords", False))
+            # Read data with reader-specific kwargs
+            reader_kwargs = {
+                'sanitize_input': not getattr(args, "no_sanitize", False),
+                'fix_missing_coords': not getattr(args, "no_fix_coords", False)
+            }
+            data = self.io.read_data(args.input, args.input_format, args.header_input, **reader_kwargs)
 
             if not data:
                 raise ValidationError('No data found in file.')

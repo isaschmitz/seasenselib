@@ -35,22 +35,40 @@ class RbrAsciiReader(AbstractReader):
         Reads RBR data from a .dat file, extracting the datetime and data columns.
     __read():
         Reads the RBR ASCII data file, processes the data, and creates an xarray Dataset.
-    get_data():
+    
+    Properties
+    ----------
+    data : xr.Dataset (read-only)
         Returns the xarray Dataset containing the sensor data.
+        For backward compatibility, get_data() method is also available but deprecated.
     """
 
-    def __init__(self, input_file : str, mapping : dict | None = None):
-        """Initializes the RbrAsciiReader with the input file and optional mapping.
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize RbrAsciiReader.
+        
         Parameters
         ----------
         input_file : str
             The path to the input file containing the RBR ASCII data.
         mapping : dict, optional
             A dictionary mapping names used in the input file to standard names.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
         """
-
-        # Initialize the base class with the input file and mapping
-        super().__init__(input_file, mapping)
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def __create_xarray_dataset(self, df) -> xr.Dataset:
@@ -99,7 +117,7 @@ class RbrAsciiReader(AbstractReader):
         header = header_line  # Assuming now 'Datetime' is handled in the next step
 
         # Now read the actual data, skipping rows up to and including the header line
-        data = pd.read_csv(file_path, delimiter="\s+", \
+        data = pd.read_csv(file_path, delimiter=r"\s+", \
                            names=['Date', 'Time'] + header, skiprows=start_data_index + 1)
 
         # Concatenate 'Date' and 'Time' columns to create a 'Datetime'
@@ -116,16 +134,16 @@ class RbrAsciiReader(AbstractReader):
     def __read(self):
         data = self.__parse_data(self.input_file)
         ds = self.__create_xarray_dataset(data)
-        self.data = ds
+        self._data = ds
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'rbr-ascii'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'RBR ASCII'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

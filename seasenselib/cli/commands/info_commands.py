@@ -73,9 +73,9 @@ class ListCommand(BaseCommand):
         result = []
         for format_info in format_info_list:
             item = {
-                'name': format_info.get('format', 'Unknown'),
+                'name': format_info.get('name', 'Unknown'),
                 'key': format_info['key'],
-                'extension': format_info.get('extension', ''),
+                'extension': format_info.get('extension') or '',
                 'class': format_info['class_name'],
                 'type': resource_type,
                 'is_plugin': format_info.get('is_plugin', False)

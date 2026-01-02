@@ -42,8 +42,7 @@ class DataIOManager:
 
     def read_data(self, input_file: str, format_hint: Optional[str] = None,
                   header_input_file: Optional[str] = None,
-                  sanitize_input: bool = True,
-                  fix_missing_coords: bool = True) -> Any:
+                  **kwargs) -> Any:
         """
         Read data from input file.
         
@@ -55,10 +54,14 @@ class DataIOManager:
             Format hint to override auto-detection
         header_input_file : str, optional
             Path to header file (required for some formats like Nortek ASCII)
-        sanitize_input : bool, default=True
-            Whether to automatically fix known file format issues (for CNV files)
-        fix_missing_coords : bool, default=True
-            Whether to use default values for missing coordinates (for CNV files)
+        **kwargs
+            Reader-specific parameters passed through to the reader.
+            Common parameters:
+            - sanitize_input : bool (for CNV files, default=True)
+            - fix_missing_coords : bool (for CNV files, default=True)
+            - encoding : str (for TOB files)
+            - time_dim : str (for ADCP readers)
+            - mapping : dict (variable name mapping)
             
         Returns:
         --------
@@ -79,11 +82,9 @@ class DataIOManager:
 
         # Create reader and get data
         reader = self.reader_factory.create_reader(
-            format_key, input_file, header_input_file,
-            sanitize_input=sanitize_input,
-            fix_missing_coords=fix_missing_coords
+            format_key, input_file, header_input_file, **kwargs
         )
-        return reader.get_data()
+        return reader.data
 
     def write_data(self, data: Any, output_file: str, format_hint: Optional[str] = None) -> None:
         """

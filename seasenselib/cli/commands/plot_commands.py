@@ -43,13 +43,16 @@ class PlotCommand(BaseCommand):
                             "Use 'seasenselib list plotters' for more details."
                 )
             
-            # Read data
+            # Read data with reader-specific kwargs
+            reader_kwargs = {
+                'sanitize_input': not args.no_sanitize,
+                'fix_missing_coords': not args.no_fix_coords
+            }
             data = self.io.read_data(
                 args.input, 
                 args.input_format, 
                 args.header_input,
-                sanitize_input=not args.no_sanitize,
-                fix_missing_coords=not args.no_fix_coords
+                **reader_kwargs
             )
             
             if not data:
@@ -131,7 +134,7 @@ class PlotCommand(BaseCommand):
         
         for plotter in sorted(plotters, key=lambda x: x['key']):
             plugin_marker = " [PLUGIN]" if plotter.get('is_plugin', False) else ""
-            print(f"  {plotter['key']:<20} {plotter['format']}{plugin_marker}")
+            print(f"  {plotter['key']:<20} {plotter['name']}{plugin_marker}")
         
         print("-" * 60)
         print(f"\nTotal: {len(plotters)} plotter(s)")

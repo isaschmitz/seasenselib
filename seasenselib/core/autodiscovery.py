@@ -332,7 +332,9 @@ class ReaderDiscovery(BaseDiscovery):
         Returns:
         --------
         List[Dict[str, str]]
-            List of format information dictionaries
+            List of format information dictionaries with keys:
+            'class_name', 'name', 'key', 'extension', 'is_plugin'
+            Note: 'extension' is always present (None if not applicable)
         """
         classes = self.discover_classes()
         plugin_classes = self.get_plugin_classes()
@@ -346,9 +348,10 @@ class ReaderDiscovery(BaseDiscovery):
 
                     format_info = {
                         'class_name': class_name,
-                        'format': class_obj.format_name(),
+                        'name': class_obj.format_name(),
                         'key': class_obj.format_key(),
-                        'is_plugin': class_name in plugin_classes
+                        'is_plugin': class_name in plugin_classes,
+                        'extension': None  # Default to None
                     }
 
                     # Get file extension if available
@@ -440,7 +443,8 @@ class WriterDiscovery(BaseDiscovery):
         --------
         List[Dict[str, str]]
             List of format information dictionaries with keys:
-            'class_name', 'format', 'key', 'extension', 'is_plugin'
+            'class_name', 'name', 'key', 'extension', 'is_plugin'
+            Note: 'extension' is always present (None if not applicable)
         """
         classes = self.discover_classes()
         plugin_classes = self.get_plugin_classes()
@@ -454,9 +458,10 @@ class WriterDiscovery(BaseDiscovery):
 
                     format_info = {
                         'class_name': class_name,
-                        'format': class_obj.format_name(),
+                        'name': class_obj.format_name(),
                         'key': class_obj.format_key(),
-                        'is_plugin': class_name in plugin_classes
+                        'is_plugin': class_name in plugin_classes,
+                        'extension': None  # Default to None
                     }
 
                     # Get file extension if available
@@ -527,18 +532,16 @@ class PlotterDiscovery(BaseDiscovery):
                 if hasattr(class_obj, 'key') and hasattr(class_obj, 'name'):
                     plotter_info = {
                         'class_name': class_name,
-                        'format': class_obj.name(),
+                        'name': class_obj.name(),
                         'key': class_obj.key(),
-                        'extension': '',  # Plotters don't have file extensions
                         'is_plugin': class_name in plugin_classes
                     }
                 else:
                     # Fall back to class name if methods not available
                     plotter_info = {
                         'class_name': class_name,
-                        'format': class_name.replace('Plotter', '').replace('_', ' ').title(),
+                        'name': class_name.replace('Plotter', '').replace('_', ' ').title(),
                         'key': class_name.lower().replace('plotter', ''),
-                        'extension': '',
                         'is_plugin': class_name in plugin_classes
                     }
 

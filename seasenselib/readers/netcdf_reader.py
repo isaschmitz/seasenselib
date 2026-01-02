@@ -27,47 +27,64 @@ class NetCdfReader(AbstractReader):
         Initializes the NetCdfReader with the input file.
     __read():
         Reads the netCDF file and processes the data into an xarray Dataset.
-    get_data():
+    
+    Properties
+    ----------
+    data : xr.Dataset (read-only)
         Returns the xarray Dataset containing the sensor data.
+        For backward compatibility, get_data() method is also available but deprecated.
+    
     format_name():
         Returns the type of the file being read, which is 'netCDF'.
     file_extension():
         Returns the file extension for this reader, which is '.nc'.
     """
 
-    def __init__(self, input_file: str, mapping: dict | None = None):
-        """Initializes the NetCdfReader with the input file.
-        Parameters:
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize NetCdfReader.
+        
+        Parameters
         ----------
         input_file : str
             The path to the input netCDF file.
         mapping : dict | None, optional
             A mapping dictionary for renaming variables or attributes in the dataset.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
         """
-
-        # Call the base class constructor
-        super().__init__(input_file, mapping)
-
-        # Read the netCDF file
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def __read(self):
         """Reads the netCDF file and processes the data into an xarray Dataset."""
 
         # Read from netCDF file
-        self.data = xr.open_dataset(self.input_file)
+        self._data = xr.open_dataset(self.input_file)
 
         # Validation
         super()._validate_necessary_parameters(self.data, None, None, 'netCDF file')
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'netcdf'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'netCDF'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return '.nc'

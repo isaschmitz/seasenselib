@@ -21,11 +21,11 @@ from seasenselib.readers import SbeCnvReader, NetCdfReader
 
 # Read a CNV file
 reader = SbeCnvReader("data.cnv")
-data = reader.get_data()
+data = reader.data
 
 # Read a NetCDF file  
 nc_reader = NetCdfReader("data.nc")
-nc_data = nc_reader.get_data()
+nc_data = nc_reader.data
 """
 
 # Import the base class

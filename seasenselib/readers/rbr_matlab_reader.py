@@ -17,8 +17,32 @@ class RbrMatlabReader(AbstractReader):
     Facade for reading RBR Matlab .mat files, automatically selecting the correct reader
     based on the root variable in the MATLAB structure.
     """
-    def __init__(self, input_file: str, mapping: dict | None = None):
-        super().__init__(input_file, mapping)
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize RbrMatlabReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the MAT file.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        super().__init__(input_file, mapping, **kwargs)
         self._reader_format_name = None
         self._reader_format_key = None
         self._select_and_read()
@@ -35,26 +59,25 @@ class RbrMatlabReader(AbstractReader):
 
         # Select the appropriate reader based on root variable
         if "RBR" in mat:
-            reader = RbrMatlabLegacyReader(self.input_file, self.mapping)
+            reader = RbrMatlabLegacyReader(self.input_file, mapping=self.mapping)
         elif "rsk" in mat:
-            reader = RbrMatlabRsktoolsReader(self.input_file, self.mapping)
+            reader = RbrMatlabRsktoolsReader(self.input_file, mapping=self.mapping)
         else:
             raise ValueError("Neither 'RBR' nor 'rsk' struct found in .mat file.")
 
         # Read the data using the selected reader
-        self.data = reader.data if hasattr(reader, "data") \
-            else reader.get_data() if hasattr(reader, "get_data") else None
-        self._reader_format_name = reader.format_name
-        self._reader_format_key = reader.format_key
+        self._data = reader.data
+        self._reader_format_name = reader.format_name()
+        self._reader_format_key = reader.format_key()
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'rbr-matlab'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'RBR Matlab'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

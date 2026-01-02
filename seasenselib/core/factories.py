@@ -1,10 +1,10 @@
-"""
-Reader and Writer factories for clean instantiation.
+"""Reader and Writer factories for clean instantiation.
 
 Modern factory pattern with Protocol-based type hints for extensibility.
 All format handling is now dynamic via autodiscovery - no hardcoded formats!
 """
 
+import inspect
 from typing import Protocol, Optional, Any, List
 from .autodiscovery import ReaderDiscovery, WriterDiscovery
 from .exceptions import ReaderError, WriterError
@@ -13,12 +13,13 @@ from .exceptions import ReaderError, WriterError
 class AbstractReader(Protocol):
     """Protocol for reader classes."""
 
-    def get_data(self) -> Any:
+    @property
+    def data(self) -> Any:
         """Get data from the reader."""
         ...
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         """Return the format key for this reader."""
         ...
 
@@ -30,8 +31,8 @@ class AbstractWriter(Protocol):
         """Write data to file."""
         ...
 
-    @staticmethod
-    def file_extension() -> str:
+    @classmethod
+    def file_extension(cls) -> str:
         """Return the file extension for this writer."""
         ...
 
@@ -44,30 +45,37 @@ class ReaderFactory:
 
     def create_reader(self, format_key: str, input_file: str, 
                      header_file: Optional[str] = None,
-                     sanitize_input: bool = True,
-                     fix_missing_coords: bool = True) -> AbstractReader:
-        """
-        Create a reader instance for the given format.
+                     **kwargs) -> AbstractReader:
+        """Create a reader instance for the given format using signature introspection.
         
-        Parameters:
-        -----------
+        This method uses Python inspect module to automatically match provided
+        parameters to the reader constructor signature, eliminating hardcoded
+        special cases and enabling plugin readers with custom parameters.
+        
+        Parameters
+        ----------
         format_key : str
             The format key (e.g., 'sbe-cnv', 'rbr-rsk')
         input_file : str
             Path to the input file
         header_file : str, optional
-            Path to header file (required for some formats like Nortek ASCII)
-        sanitize_input : bool, default=True
-            Whether to automatically fix known file format issues (for CNV readers)
-        fix_missing_coords : bool, default=True
-            Whether to use default values for missing coordinates (for CNV readers)
+            Path to header file (for formats like Nortek ASCII that need it)
+        **kwargs
+            All other parameters are matched against the reader constructor
+            signature. Common parameters:
+            - mapping : dict (variable name mapping, supported by all readers)
+            - sanitize_input : bool (for CNV readers)
+            - fix_missing_coords : bool (for CNV readers)
+            - encoding : str (for TOB readers)
+            - time_dim : str (for ADCP readers)
+            - Any custom parameters for plugin readers
             
-        Returns:
-        --------
+        Returns
+        -------
         AbstractReader
             Reader instance ready to use
             
-        Raises:
+        Raises
         -------
         ReaderError
             If reader cannot be created
@@ -77,38 +85,54 @@ class ReaderFactory:
         if not reader_class:
             raise ReaderError(f"No reader found for format: {format_key}")
 
-        # Check if reader needs special parameters
-        return self._instantiate_reader(reader_class, format_key, input_file, header_file,
-                                       sanitize_input, fix_missing_coords)
+        # Special validation: Nortek ASCII requires header file
+        if format_key == "nortek-ascii" and not header_file:
+            raise ReaderError(
+                "Nortek ASCII format requires a header file. "
+                "Use --header-input to specify the header file."
+            )
 
-    def _instantiate_reader(self, reader_class: type, format_key: str,
-                          input_file: str, header_file: Optional[str],
-                          sanitize_input: bool = True,
-                          fix_missing_coords: bool = True) -> AbstractReader:
+        # Use signature introspection to match parameters
+        return self._instantiate_reader(reader_class, input_file, header_file, **kwargs)
+
+    def _instantiate_reader(self, reader_class: type, input_file: str,
+                          header_file: Optional[str], **kwargs) -> AbstractReader:
         """
-        Instantiate reader with appropriate parameters.
+        Instantiate reader using signature introspection.
         
-        This method handles special cases where readers need different parameters.
-        Ideally, readers would declare their parameter requirements themselves.
+        This method inspects the reader __init__ signature and only passes
+        parameters that the reader actually accepts, enabling automatic support
+        for plugin readers with custom parameters.
         """
-        # Special case: Nortek ASCII requires header file
-        if format_key == "nortek-ascii":
-            if not header_file:
-                raise ReaderError(
-                    "Nortek ASCII format requires a header file. "
-                    "Use --header-input to specify the header file."
-                )
-            return reader_class(input_file, header_file)
-
-        # Special case: SeaBird CNV reader supports configuration flags
-        if format_key == "sbe-cnv":
-            return reader_class(input_file,
-                              mapping=None,
-                              sanitize_input=sanitize_input,
-                              fix_missing_coords=fix_missing_coords)
-
-        # Standard case: most readers just need the input file
-        return reader_class(input_file)
+        # Get the constructor signature
+        sig = inspect.signature(reader_class.__init__)
+        params = sig.parameters
+        
+        # Build kwargs that match the reader signature
+        matched_kwargs = {}
+        all_kwargs = {'input_header_file': header_file, **kwargs}
+        
+        # Check each parameter in the signature
+        for param_name, param in params.items():
+            if param_name in ('self', 'input_file'):
+                continue
+            
+            # If this parameter exists in our kwargs, include it
+            if param_name in all_kwargs and all_kwargs[param_name] is not None:
+                matched_kwargs[param_name] = all_kwargs[param_name]
+            # If reader accepts **kwargs, pass everything through
+            elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                matched_kwargs.update(all_kwargs)
+                break
+        
+        # Special handling for Nortek ASCII which needs positional header_file_path
+        if 'header_file_path' in params and header_file:
+            matched_kwargs['header_file_path'] = header_file
+            # Remove input_header_file if present (Nortek uses header_file_path)
+            matched_kwargs.pop('input_header_file', None)
+        
+        # Instantiate with matched parameters
+        return reader_class(input_file, **matched_kwargs)
 
 
 class WriterFactory:
@@ -169,6 +193,7 @@ class WriterFactory:
         Returns:
         --------
         List[dict]
-            List of format info dicts with keys: 'key', 'format', 'extension', 'class_name'
+            List of format info dicts with keys: 'key', 'name', 'extension', 'class_name'
         """
         return self._discovery.get_format_info()
+

@@ -18,13 +18,40 @@ class RbrMatlabRsktoolsReader(AbstractReader):
     into xarray Datasets with separate variables for each sensor channel.
     """
 
-    def __init__(self, input_file, mapping=None, time_dim: str = params.TIME):
-        self.time_dim = time_dim
-        # Instrument information
-        self.instrument_info = {}
-        self.channels_info = {}
-        self.epochs_info = {}
-        super().__init__(input_file, mapping)
+    def __init__(self, input_file: str,
+                 time_dim: str = params.TIME,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize RbrMatlabRsktoolsReader.
+        
+        Parameters
+        ----------
+        input_file : str
+            Path to the MAT file.
+        time_dim : str, default=params.TIME
+            Name of the time dimension in the output dataset.
+        mapping : dict, optional
+            Variable name mapping dictionary.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
+        """
+        self._time_dim = time_dim
+        # Instrument information (private - used only during parsing)
+        self._instrument_info = {}
+        self._channels_info = {}
+        self._epochs_info = {}
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def __parse_rsk_data(self, mat_file_path : str) -> xr.Dataset:
@@ -87,7 +114,7 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         # Instrument information
         instruments = getattr(rsk, 'instruments', None)
         if instruments is not None:
-            self.instrument_info = {
+            self._instrument_info = {
                 'model': self._safe_getattr(instruments, 'model', 'Unknown'),
                 'serial_id': self._safe_getattr(instruments, 'serialID', 'Unknown'),
                 'firmware_version': self._safe_getattr(instruments, 'firmwareVersion', 'Unknown'),
@@ -100,7 +127,7 @@ class RbrMatlabRsktoolsReader(AbstractReader):
             for i, channel in enumerate(np.atleast_1d(channels)):
                 try:
                     channel_name = self._safe_getattr(channel, 'longName', f'Channel_{i}')
-                    self.channels_info[channel_name] = {
+                    self._channels_info[channel_name] = {
                         'index': i,
                         'longName': channel_name,
                         'shortName': self._safe_getattr(channel, 'shortName', channel_name),
@@ -113,7 +140,7 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         # Epoch information
         epochs = getattr(rsk, 'epochs', None)
         if epochs is not None:
-            self.epochs_info = {
+            self._epochs_info = {
                 'startTime': self._safe_getattr(epochs, 'startTime', None),
                 'endTime': self._safe_getattr(epochs, 'endTime', None),
                 'deploymentID': self._safe_getattr(epochs, 'deploymentID', None)
@@ -154,12 +181,12 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         values = np.asarray(values)
 
         # Coordinates
-        coords = {self.time_dim: timestamps}
+        coords = {self._time_dim: timestamps}
 
         # Data variables for each channel
         data_vars = {}
         
-        for channel_name, channel_info in self.channels_info.items():
+        for channel_name, channel_info in self._channels_info.items():
             channel_index = channel_info['index']
             
             if channel_index < values.shape[1]:
@@ -167,7 +194,7 @@ class RbrMatlabRsktoolsReader(AbstractReader):
                 
                 data_vars[channel_name] = xr.DataArray(
                     channel_data,
-                    dims=[self.time_dim],
+                    dims=[self._time_dim],
                     attrs={
                         'long_name': channel_info['longName'],
                         'units': channel_info['units'],
@@ -196,18 +223,18 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         """Extract global dataset attributes."""
         attrs = {
             'Conventions': 'CF-1.8',
-            'source': f"RBR {self.instrument_info.get('model', 'Unknown')}",
+            'source': f"RBR {self._instrument_info.get('model', 'Unknown')}",
         }
 
         # Instrument information
-        for key, value in self.instrument_info.items():
+        for key, value in self._instrument_info.items():
             attrs[f'rbr_instrument_{key}'] = value
 
         # Epoch information
-        if self.epochs_info.get('startTime') is not None:
+        if self._epochs_info.get('startTime') is not None:
             try:
                 start_dt = pd.to_datetime(
-                    self.epochs_info['startTime'], 
+                    self._epochs_info['startTime'], 
                     unit='D', 
                     origin='0000-01-01'
                 )
@@ -215,10 +242,10 @@ class RbrMatlabRsktoolsReader(AbstractReader):
             except:
                 pass
         
-        if self.epochs_info.get('endTime') is not None:
+        if self._epochs_info.get('endTime') is not None:
             try:
                 end_dt = pd.to_datetime(
-                    self.epochs_info['endTime'], 
+                    self._epochs_info['endTime'], 
                     unit='D', 
                     origin='0000-01-01'
                 )
@@ -230,20 +257,16 @@ class RbrMatlabRsktoolsReader(AbstractReader):
 
     def __read(self):
         """Main reading method."""
-        self.data = self.__parse_rsk_data(self.input_file)
+        self._data = self.__parse_rsk_data(self.input_file)
 
-    def get_data(self) -> xr.Dataset:
-        """Return the converted dataset."""
-        return self.data
+    @classmethod
+    def format_key(cls) -> str:
+        return 'rbr-matlab-rsktools'
 
-    @staticmethod
-    def format_key() -> str:
-        return "rbr-matlab-rsktools"
-
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return "RBR Matlab RSKtools"
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None

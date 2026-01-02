@@ -166,7 +166,7 @@ class CLIRouter:
             print("Available plotter keys:")
             for plotter in sorted(plotters, key=lambda x: x['key']):
                 plugin_marker = " [PLUGIN]" if plotter.get('is_plugin', False) else ""
-                print(f"  {plotter['key']:<20} {plotter['format']}{plugin_marker}")
+                print(f"  {plotter['key']:<20} {plotter['name']}{plugin_marker}")
             print()
             print("Use 'seasenselib plot <plotter-key> -h' for plotter-specific options.")
             print("Use 'seasenselib list plotters' for more details.")

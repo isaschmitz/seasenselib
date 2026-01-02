@@ -26,8 +26,10 @@ class RbrRskLegacyReader(AbstractReader):
         A dictionary mapping names used in the input file to standard names.
     """
 
-    def __init__(self, input_file : str, mapping : dict | None = None):
-        """ Initializes the RbrRskLegacyReader with the input file and optional mapping.
+    def __init__(self, input_file: str,
+                 mapping: dict | None = None,
+                 **kwargs):
+        """Initialize RbrRskLegacyReader.
 
         Parameters
         ----------
@@ -35,8 +37,21 @@ class RbrRskLegacyReader(AbstractReader):
             The path to the input file containing the data.
         mapping : dict, optional
             A dictionary mapping names used in the input file to standard names.
+        **kwargs
+            Additional base class parameters:
+            
+            - input_header_file : str | None
+                Path to separate header file (if applicable).
+            - perform_default_postprocessing : bool, default=True
+                Whether to perform default post-processing.
+            - rename_variables : bool, default=True
+                Whether to rename variables to standard names.
+            - assign_metadata : bool, default=True
+                Whether to assign CF-compliant metadata.
+            - sort_variables : bool, default=True
+                Whether to sort variables alphabetically.
         """
-        super().__init__(input_file, mapping)
+        super().__init__(input_file, mapping, **kwargs)
         self.__read()
 
     def _read_instrument_data(self, con: sqlite3.Connection) -> dict:
@@ -224,19 +239,19 @@ class RbrRskLegacyReader(AbstractReader):
         ds = self._perform_default_postprocessing(ds)
 
         # Store processed data
-        self.data = ds
+        self._data = ds
 
         # Close the database connection
         con.close()
 
-    @staticmethod
-    def format_key() -> str:
+    @classmethod
+    def format_key(cls) -> str:
         return 'rbr-rsk-legacy'
 
-    @staticmethod
-    def format_name() -> str:
+    @classmethod
+    def format_name(cls) -> str:
         return 'RBR RSK Legacy'
 
-    @staticmethod
-    def file_extension() -> str | None:
+    @classmethod
+    def file_extension(cls) -> str | None:
         return None
