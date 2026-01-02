@@ -40,7 +40,7 @@ class SbeCnvReader(AbstractReader):
 
     Methods
     -------
-    __init__(input_file, mapping=None, sanitize_input=True, fix_missing_coords=True):
+    __init__(input_file, sanitize_input=True, fix_missing_coords=True, mapping=None, **kwargs):
         Initializes the CnvReader with the input file and configuration options.
     data():
         Returns the xarray Dataset containing the sensor data.
