@@ -184,8 +184,8 @@ class AdcpMatlabUhhdsReader(AbstractReader):
         
         elif fmt == "v13":
             
-            bin1_mid = np.squeeze(self.data.get("RDIBin1Mid", [np.nan]))
-            bin_size = np.squeeze(self.data.get("RDIBinSize", [np.nan]))
+            bin1_mid = np.squeeze(self._raw_matlab_data.get("RDIBin1Mid", [np.nan]))
+            bin_size = np.squeeze(self._raw_matlab_data.get("RDIBinSize", [np.nan]))
             num_bins = self._raw_matlab_data['SerBins'].shape[1]
             depth = bin1_mid + bin_size * np.arange(num_bins)
             
