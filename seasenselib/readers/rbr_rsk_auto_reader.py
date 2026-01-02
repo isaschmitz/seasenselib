@@ -105,8 +105,8 @@ class RbrRskAutoReader(AbstractReader):
 
         # Read the data using the selected reader
         self._data = reader.data
-        self._reader_format_name = reader.format_name
-        self._reader_format_key = reader.format_key
+        self._reader_format_name = reader.format_name()
+        self._reader_format_key = reader.format_key()
 
     @classmethod
     def format_key(cls) -> str:
