@@ -387,7 +387,7 @@ class TestReadersCompleteness(unittest.TestCase):
 
     def test_format_info_entries_are_valid_dicts(self):
         """Test that all format info entries are valid dictionaries with required keys."""
-        required_keys = {'key', 'format', 'class_name'}
+        required_keys = {'key', 'name', 'class_name'}
         
         for i, entry in enumerate(self.format_info):
             with self.subTest(entry_index=i):
@@ -402,7 +402,7 @@ class TestReadersCompleteness(unittest.TestCase):
                 # Check required fields are not empty
                 self.assertTrue(entry['key'].strip() if entry['key'] else False,
                               f"format key should not be empty in entry {i}")
-                self.assertTrue(entry['format'].strip() if entry['format'] else False,
+                self.assertTrue(entry['name'].strip() if entry['name'] else False,
                               f"format name should not be empty in entry {i}")
                 self.assertTrue(entry['class_name'].strip() if entry['class_name'] else False,
                               f"class_name should not be empty in entry {i}")
@@ -420,7 +420,7 @@ class TestReadersCompleteness(unittest.TestCase):
         for entry in self.format_info:
             with self.subTest(format_key=entry['key']):
                 self.assertTrue(kebab_case_pattern.match(entry['key']),
-                              f"format_key '{entry['key']}' for {entry['format']} "
+                              f"format_key '{entry['key']}' for {entry['name']} "
                               f"must be in kebab-case format")
 
     def test_file_extensions_are_unique_when_present(self):
@@ -514,8 +514,8 @@ class TestReadersCompleteness(unittest.TestCase):
                 # Test format_name consistency
                 if hasattr(reader_class, 'format_name'):
                     actual_format_name = reader_class.format_name()
-                    self.assertEqual(entry['format'], actual_format_name,
-                                   f"Format info name '{entry['format']}' doesn't match "
+                    self.assertEqual(entry['name'], actual_format_name,
+                                   f"Format info name '{entry['name']}' doesn't match "
                                    f"class method result '{actual_format_name}' for {class_name}")
                 
                 # Test file_extension consistency
