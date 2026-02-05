@@ -17,7 +17,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Any, Optional
 import re
-import warnings
 import xarray as xr
 import gsw
 import seasenselib.parameters as params
