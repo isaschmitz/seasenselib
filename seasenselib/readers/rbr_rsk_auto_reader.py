@@ -114,13 +114,13 @@ class RbrRskAutoReader(AbstractReader):
         if is_modern:
             reader = RbrRskReader(
                 self.input_file,
-                self.mapping,
+                mapping=self.mapping,
                 **self._kwargs
             )
         else:
             reader = RbrRskLegacyReader(
                 self.input_file,
-                self.mapping,
+                mapping=self.mapping,
                 **self._kwargs
             )
 

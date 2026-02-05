@@ -74,13 +74,13 @@ class RbrMatlabReader(AbstractReader):
         if "RBR" in mat:
             reader = RbrMatlabLegacyReader(
                 self.input_file,
-                self.mapping,
+                mapping=self.mapping,
                 **self._kwargs
             )
         elif "rsk" in mat:
             reader = RbrMatlabRsktoolsReader(
                 self.input_file,
-                self.mapping,
+                mapping=self.mapping,
                 **self._kwargs
             )
         else:
