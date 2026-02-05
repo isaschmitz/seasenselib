@@ -8,7 +8,7 @@ The modern reader design pattern includes:
 1. Call _validate_file() in __init__ for fail-fast validation
 2. Implement _load_data() method that returns xr.Dataset (called lazily by data property)
 3. Implement _get_valid_extensions() class method for extension validation
-4. Implement _extract_metadata() to populate format-specific metadata (called after _load_data)
+4. Implement _extract_metadata() to populate format-specific metadata
 
 IMPORTANT: Do NOT call _load_data() in __init__! The base class data property 
 handles lazy loading automatically.
