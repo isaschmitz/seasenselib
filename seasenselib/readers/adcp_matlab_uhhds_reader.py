@@ -77,9 +77,15 @@ class AdcpMatlabUhhdsReader(AbstractReader):
         """
         super().__init__(input_file, mapping, **kwargs)
         self._format = None
-        self._read()
+        self._validate_file()
 
-    def _read(self):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
+
+    def _load_data(self) -> xr.Dataset:
+        """Load data from the MATLAB file and return an xarray Dataset."""
         import scipy.io
 
         # Load raw MATLAB data into temporary variable
@@ -93,8 +99,7 @@ class AdcpMatlabUhhdsReader(AbstractReader):
         for key in (list(dataset.data_vars.keys()) + list(dataset.coords.keys())):
             super()._assign_metadata_for_key_to_xarray_dataset(dataset, key)
         
-        # Store the final xarray Dataset in self._data
-        self._data = dataset
+        return dataset
 
     def _detect_format(self):
         keys = self._raw_matlab_data.keys()

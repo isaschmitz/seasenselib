@@ -8,11 +8,14 @@ from specific file formats (e.g., CNV, TOB, NetCDF, CSV, RBR, Nortek).
 """
 
 from __future__ import annotations
+import os
 import platform
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from importlib.metadata import version
 from collections import defaultdict
+from pathlib import Path
+from typing import Dict, Any
 import re
 import xarray as xr
 import gsw
@@ -26,6 +29,13 @@ class AbstractReader(ABC):
 
     Must be subclassed to implement specific file format readers.
     
+    This class supports the context manager protocol for automatic resource cleanup:
+    
+    >>> with SomeReader('data.cnv') as reader:
+    ...     ds = reader.data
+    ...     # process data
+    >>> # data automatically released
+    
     Attributes
     ---------- 
     input_file : str (read-only property)
@@ -37,6 +47,10 @@ class AbstractReader(ABC):
     data : xr.Dataset | None (read-only property)
         The processed sensor data as a xarray Dataset, or None if not yet processed.
         This is a read-only property. Use :meth:`get_data()` for backward compatibility.
+    is_loaded : bool (read-only property)
+        Whether data has been loaded from the file.
+    metadata : dict (read-only property)
+        File metadata (size, modification time, etc.) without loading data.
     perform_default_postprocessing : bool
         Whether to perform default post-processing on the data.
     rename_variables : bool
@@ -53,6 +67,12 @@ class AbstractReader(ABC):
                     rename_variables: bool = True, assign_metadata: bool = True, 
                     sort_variables: bool = True)
             Initializes the reader with the input file and optional mapping.
+    __enter__() -> AbstractReader
+            Context manager entry point.
+    __exit__(exc_type, exc_val, exc_tb) -> None
+            Context manager exit - releases data from memory.
+    reload() -> AbstractReader
+            Force reload data from file, clearing any cached data.
     _perform_default_postprocessing(ds: xr.Dataset) -> xr.Dataset
             Performs default post-processing on the xarray Dataset.
     get_data() -> xr.Dataset | None
@@ -103,6 +123,165 @@ class AbstractReader(ABC):
         self._config_sort_variables = sort_variables
         # **kwargs is intentionally not stored - subclasses handle their own parameters
 
+    # =========================================================================
+    # File Validation Methods (Override in subclasses for format-specific validation)
+    # =========================================================================
+
+    def _validate_file(self) -> None:
+        """Validate the input file before reading.
+        
+        This method performs basic file validation (existence, not empty).
+        Subclasses can override to add format-specific validation such as
+        checking file extensions or file headers.
+        
+        Raises
+        ------
+        FileNotFoundError
+            If the file does not exist.
+        ValueError
+            If the file is not a regular file, is empty, or has an invalid
+            extension (only if strict validation is enabled).
+            
+        Note
+        ----
+        This method is called automatically by subclasses that implement
+        the modern reader pattern. For backward compatibility with existing
+        readers that don't call this method, validation failures won't break
+        the instantiation process unless explicitly called.
+        
+        Extension validation behavior depends on `_is_extension_validation_strict()`:
+        - True (default): Invalid extension raises ValueError
+        - False: Invalid extension logs a warning but continues
+        
+        Examples
+        --------
+        >>> class MyReader(AbstractReader):
+        ...     def __init__(self, input_file, **kwargs):
+        ...         super().__init__(input_file, **kwargs)
+        ...         self._validate_file()  # Validate before data is accessed
+        """
+        path = Path(self._input_file)
+        
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {self._input_file}")
+        
+        if not path.is_file():
+            raise ValueError(f"Path is not a file: {self._input_file}")
+        
+        if path.stat().st_size == 0:
+            raise ValueError(f"File is empty: {self._input_file}")
+        
+        # Check extension if subclass specifies valid extensions
+        valid_ext = self._get_valid_extensions()
+        if valid_ext is not None:
+            if path.suffix.lower() not in valid_ext:
+                message = (
+                    f"Unexpected file extension '{path.suffix}' for {self.__class__.__name__}. "
+                    f"Expected one of: {', '.join(valid_ext)}"
+                )
+                if self._is_extension_validation_strict():
+                    raise ValueError(message)
+                else:
+                    import logging
+                    logging.getLogger(__name__).warning(message)
+
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for this reader.
+        
+        Subclasses should override this method to specify which file extensions
+        are valid for their format. Return None to skip extension validation.
+        
+        Returns
+        -------
+        tuple[str, ...] | None
+            Tuple of valid extensions (e.g., ('.cnv', '.CNV')) or None to skip validation.
+            Extensions should include the leading dot and be lowercase.
+            
+        Examples
+        --------
+        >>> class MyReader(AbstractReader):
+        ...     @classmethod
+        ...     def _get_valid_extensions(cls) -> tuple[str, ...]:
+        ...         return ('.myformat', '.myf')
+        """
+        return None  # Default: no extension validation
+
+    @classmethod
+    def _is_extension_validation_strict(cls) -> bool:
+        """Return whether extension validation should raise an error or just warn.
+        
+        Override this method in subclasses to control validation behavior:
+        - Return True (default): Invalid extension raises ValueError
+        - Return False: Invalid extension logs a warning but continues
+        
+        Typically return False for ASCII/text-based formats that can have
+        various extensions (.dat, .txt, .asc, etc.), and True for binary
+        or proprietary formats with specific extensions (.rsk, .mat, .cnv).
+        
+        Returns
+        -------
+        bool
+            True for strict validation (error), False for soft validation (warning).
+            
+        Examples
+        --------
+        >>> class AsciiReader(AbstractReader):
+        ...     @classmethod
+        ...     def _is_extension_validation_strict(cls) -> bool:
+        ...         return False  # Warn only for ASCII formats
+        """
+        return True  # Default: strict validation
+
+    # =========================================================================
+    # Data Loading Methods (Override _load_data in subclasses)
+    # =========================================================================
+
+    def _load_data(self) -> xr.Dataset:
+        """Load data from the input file.
+        
+        Subclasses SHOULD override this method to implement format-specific
+        data loading logic. This method is called by the `data` property
+        when lazy loading is enabled, or by `__init__` for eager loading.
+        
+        The default implementation raises NotImplementedError to indicate
+        that subclasses using the legacy pattern (with private `__read()` methods)
+        should continue working as before.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+            
+        Raises
+        ------
+        NotImplementedError
+            If the subclass does not override this method.
+            
+        Note
+        ----
+        For backward compatibility, existing readers that use `__read()` 
+        methods called from `__init__` will continue to work. New readers
+        should implement `_load_data()` and call it from `__init__` or
+        let the `data` property handle lazy loading.
+        
+        Examples
+        --------
+        >>> class MyReader(AbstractReader):
+        ...     def _load_data(self) -> xr.Dataset:
+        ...         # Read file and return Dataset
+        ...         ds = xr.open_dataset(self.input_file)
+        ...         return self._perform_default_postprocessing(ds)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _load_data() method. "
+            "See AbstractReader documentation for the expected interface."
+        )
+
+    # =========================================================================
+    # Properties
+    # =========================================================================
+
     @property
     def input_file(self) -> str:
         """Get the input file path (read-only).
@@ -135,6 +314,149 @@ class AbstractReader(ABC):
             Dictionary mapping custom variable names to standard names
         """
         return self._mapping
+
+    @property
+    def is_loaded(self) -> bool:
+        """Check if data has been loaded from file.
+        
+        Returns
+        -------
+        bool
+            True if data has been loaded, False otherwise.
+            
+        Examples
+        --------
+        >>> reader = SomeReader('data.cnv')
+        >>> print(reader.is_loaded)  # False until data property is accessed
+        """
+        return self._data is not None
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        """Get file-level metadata without loading data.
+        
+        This property provides access to file-level metadata such as
+        file size and modification time without requiring the full
+        data to be loaded into memory.
+        
+        For dataset-specific information (variables, dimensions, attributes),
+        access the `data` property and inspect the xarray Dataset directly.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing file metadata:
+            - file_path: Absolute path to the file
+            - file_name: Base name of the file
+            - file_size: Size in bytes
+            - file_size_human: Human-readable size (e.g., "1.5 MB")
+            - modified_time: Last modification timestamp (ISO format)
+            - format_key: Reader format key
+            - format_name: Reader format name
+            
+        Examples
+        --------
+        >>> reader = SomeReader('data.cnv')
+        >>> print(f"File: {reader.metadata['file_name']}")
+        >>> print(f"Size: {reader.metadata['file_size_human']}")
+        >>> print(f"Format: {reader.metadata['format_name']}")
+        >>> 
+        >>> # For dataset info, use reader.data:
+        >>> ds = reader.data
+        >>> print(f"Variables: {list(ds.data_vars)}")
+        >>> print(f"Dimensions: {dict(ds.dims)}")
+        """
+        path = Path(self._input_file)
+        stat = path.stat()
+        
+        # Human-readable file size
+        size_bytes = stat.st_size
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024:
+                size_human = f"{size_bytes:.1f} {unit}"
+                break
+            size_bytes /= 1024
+        else:
+            size_human = f"{size_bytes:.1f} PB"
+        
+        return {
+            'file_path': str(path.absolute()),
+            'file_name': path.name,
+            'file_size': stat.st_size,
+            'file_size_human': size_human,
+            'modified_time': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            'format_key': self.format_key(),
+            'format_name': self.format_name(),
+        }
+
+    def reload(self) -> 'AbstractReader':
+        """Force reload data from file.
+        
+        Clears any cached data and re-reads from the file.
+        This is useful when the underlying file has been modified
+        or to free memory temporarily.
+        
+        Returns
+        -------
+        AbstractReader
+            Returns self for method chaining.
+            
+        Note
+        ----
+        After calling reload(), the data will be re-read when the `data`
+        property is next accessed (for lazy-loading readers) or you may
+        need to create a new reader instance (for eager-loading readers).
+        
+        Examples
+        --------
+        >>> reader = SomeReader('data.cnv')
+        >>> reader.reload()  # Clear cached data
+        >>> ds = reader.data  # Re-read from file (lazy loading)
+        """
+        self._data = None
+        return self
+
+    def __enter__(self) -> 'AbstractReader':
+        """Context manager entry point.
+        
+        Returns
+        -------
+        AbstractReader
+            Returns self for use in with statement.
+            
+        Examples
+        --------
+        >>> with SomeReader('data.cnv') as reader:
+        ...     ds = reader.data
+        ...     # process data
+        >>> # data automatically released
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit - releases data from memory.
+        
+        Parameters
+        ----------
+        exc_type : type
+            Exception type if an exception was raised.
+        exc_val : BaseException
+            Exception value if an exception was raised.
+        exc_tb : TracebackType
+            Traceback if an exception was raised.
+        """
+        self._data = None
+
+    def __repr__(self) -> str:
+        """String representation of the reader.
+        
+        Returns
+        -------
+        str
+            Human-readable string showing class name, file, and load status.
+        """
+        loaded_str = "loaded" if self.is_loaded else "not loaded"
+        return f"{self.__class__.__name__}('{self._input_file}', {loaded_str})"
 
     def _julian_to_gregorian(self, julian_days, start_date):
         full_days = int(julian_days) - 1  # Julian days start at 1, not 0
@@ -437,24 +759,50 @@ class AbstractReader(ABC):
 
     @property
     def data(self) -> xr.Dataset | None:
-        """Get the processed sensor data as an xarray Dataset.
+        """Get the processed sensor data as an xarray Dataset (lazy loading).
         
-        This property provides read-only access to the data that was read
-        from the input file and processed by the reader.
+        This property provides read-only access to the data. The data is loaded
+        lazily on first access - subsequent accesses return the cached dataset.
         
         Returns
         -------
         xr.Dataset | None
-            The processed sensor data, or None if not yet read.
+            The processed sensor data.
+            
+        Raises
+        ------
+        NotImplementedError
+            If the subclass does not implement `_load_data()`.
+        RuntimeError
+            If data loading fails.
+            
+        Examples
+        --------
+        >>> reader = SomeReader('data.cnv')
+        >>> print(reader.is_loaded)  # False - not loaded yet
+        >>> ds = reader.data  # Triggers lazy load
+        >>> print(reader.is_loaded)  # True - now loaded
+        >>> ds2 = reader.data  # Returns cached data
+        >>> assert ds is ds2  # Same object
         """
+        if self._data is None:
+            try:
+                self._data = self._load_data()
+            except NotImplementedError:
+                # Re-raise NotImplementedError with clear message
+                raise
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to load data from {self._input_file}: {e}"
+                ) from e
         return self._data
 
     def get_data(self) -> xr.Dataset | None:
         """Returns the processed data as an xarray Dataset.
         
-        .. deprecated:: 1.5
+        .. deprecated:: 0.4.0
             Use the :attr:`data` property instead: ``reader.data``
-            This method will be removed in version 2.0.
+            This method will be removed in version 1.0.0.
             
         Returns
         -------
@@ -463,7 +811,7 @@ class AbstractReader(ABC):
         """
         import warnings
         warnings.warn(
-            "get_data() is deprecated and will be removed in version 2.0. "
+            "get_data() is deprecated and will be removed in version 1.0.0. "
             "Use the 'data' property instead: reader.data",
             DeprecationWarning,
             stacklevel=2

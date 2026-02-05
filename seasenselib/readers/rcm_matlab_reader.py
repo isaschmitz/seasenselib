@@ -36,9 +36,14 @@ class RcmMatlabReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __parse_data(self, mat_file_path):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
+
+    def _parse_data(self, mat_file_path):
         import scipy.io
 
         # read adcp file 
@@ -67,7 +72,7 @@ class RcmMatlabReader(AbstractReader):
 
         return df
 
-    def __create_xarray_dataset(self, df):
+    def _create_xarray_dataset(self, df):
         """create xarray dataset from pandas dataframe"""
 
         ds = xr.Dataset.from_dataframe(df)
@@ -118,10 +123,10 @@ class RcmMatlabReader(AbstractReader):
             super()._assign_metadata_for_key_to_xarray_dataset( ds, key)
         return ds
 
-    def __read(self):
-        data = self.__parse_data(self.input_file)
-        ds = self.__create_xarray_dataset(data)
-        self._data = ds
+    def _load_data(self) -> xr.Dataset:
+        """Load data from the MATLAB file and return an xarray Dataset."""
+        data = self._parse_data(self.input_file)
+        return self._create_xarray_dataset(data)
 
     @classmethod
     def format_key(cls) -> str:

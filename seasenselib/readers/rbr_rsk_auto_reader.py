@@ -17,7 +17,14 @@ class RbrRskAutoReader(AbstractReader):
 
     This class checks the type and version of the RSK file and initializes either
     the RbrRskReader for modern files or the RbrRskLegacyReader for legacy files.
-    It reads the data and returns it as an xarray Dataset.      
+    It reads the data and returns it as an xarray Dataset.
+    
+    Note
+    ----
+    File validation occurs twice: once in this facade and once in the delegate reader.
+    This is intentional design for defense-in-depth and to ensure delegate readers
+    work correctly when instantiated directly. The validation overhead is
+    negligible compared to file loading time.      
 
     Attributes
     ----------
@@ -36,7 +43,7 @@ class RbrRskAutoReader(AbstractReader):
 
     Methods
     -------
-    _select_and_read()
+    _load_data()
         Selects the appropriate reader based on the RSK file type and version,
         and reads the data into an xarray Dataset.
     """
@@ -69,14 +76,26 @@ class RbrRskAutoReader(AbstractReader):
         super().__init__(input_file, mapping, **kwargs)
         self._reader_format_name = None
         self._reader_format_key = None
-        self._select_and_read()
+        self._validate_file()
+        # Store kwargs to pass to delegate reader
+        self._kwargs = kwargs
 
-    def _select_and_read(self):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for RSK files."""
+        return ('.rsk',)
+
+    def _load_data(self) -> xr.Dataset:
         """ Selects the appropriate reader based on the RSK file type and version.
 
         This method connects to the SQLite database within the RSK file, checks the
         type and version of the database, and initializes either the RbrRskReader
-        or the RbrRskLegacyReader accordingly. 
+        or the RbrRskLegacyReader accordingly.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
         """
 
         import sqlite3
@@ -98,15 +117,25 @@ class RbrRskAutoReader(AbstractReader):
         )
 
         # Select the appropriate reader based on the type and version
+        # Pass through all kwargs to honor configuration options
         if is_modern:
-            reader = RbrRskReader(self.input_file, self.mapping)
+            reader = RbrRskReader(
+                self.input_file,
+                mapping=self.mapping,
+                **self._kwargs
+            )
         else:
-            reader = RbrRskLegacyReader(self.input_file, self.mapping)
+            reader = RbrRskLegacyReader(
+                self.input_file,
+                mapping=self.mapping,
+                **self._kwargs
+            )
 
-        # Read the data using the selected reader
-        self._data = reader.data
+        # Store reader metadata
         self._reader_format_name = reader.format_name()
         self._reader_format_key = reader.format_key()
+        
+        return reader.data
 
     @classmethod
     def format_key(cls) -> str:

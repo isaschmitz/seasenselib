@@ -8,7 +8,9 @@ writing data to various formats (e.g., NetCDF, CSV, Excel).
 """
 
 from abc import ABC, abstractmethod
+import warnings
 import xarray as xr
+
 
 class AbstractWriter(ABC):
     """Abstract base class for writing sensor data from xarray Datasets.
@@ -17,25 +19,31 @@ class AbstractWriter(ABC):
     All concrete writer classes should inherit from this class and implement
     the write method.
     
+    This class supports the context manager protocol for automatic resource cleanup:
+    
+    >>> with SomeWriter(dataset) as writer:
+    ...     writer.write('output.nc')
+    >>> # resources automatically cleaned up
+    
     Attributes:
     -----------
-    data : xr.Dataset
+    data : xr.Dataset (read-only)
         The xarray Dataset containing the sensor data to be written.
     
     Methods:
     --------
     __init__(data: xr.Dataset):
         Initializes the writer with the provided xarray Dataset.
+    __enter__() -> AbstractWriter:
+        Context manager entry point.
+    __exit__(exc_type, exc_val, exc_tb) -> None:
+        Context manager exit - releases resources.
     file_extension: str
         The default file extension for this writer (to be implemented by subclasses).
     format_name() -> str:
         Get the format name for this writer (to be implemented by subclasses).
     format_key() -> str:
         Get the format key for this writer (to be implemented by subclasses).
-    data: xr.Dataset
-        The xarray Dataset containing the sensor data.
-    data.setter(value: xr.Dataset):
-        Sets the xarray Dataset with validation.
     write(file_name: str, **kwargs):
         Writes the xarray Dataset to a file (to be implemented by subclasses).
 
@@ -64,7 +72,8 @@ class AbstractWriter(ABC):
         if not isinstance(data, xr.Dataset):
             raise TypeError("Data must be an xarray Dataset.")
 
-        self.data = data  # This will use the setter
+        self._data = data
+        self._initialized = True  # Flag to control setter behavior
 
     @staticmethod
     @abstractmethod
@@ -127,7 +136,7 @@ class AbstractWriter(ABC):
 
     @property
     def data(self) -> xr.Dataset:
-        """Get the xarray Dataset.
+        """Get the xarray Dataset (read-only).
         
         Returns:
         --------
@@ -138,7 +147,11 @@ class AbstractWriter(ABC):
 
     @data.setter
     def data(self, value: xr.Dataset) -> None:
-        """Set the xarray Dataset with validation.
+        """Set the xarray Dataset with validation (deprecated).
+        
+        .. deprecated:: 1.5
+            Setting data after construction is deprecated and will be
+            removed in version 2.0. Create a new writer instance instead.
         
         Parameters:
         -----------
@@ -152,7 +165,56 @@ class AbstractWriter(ABC):
         """
         if not isinstance(value, xr.Dataset):
             raise TypeError("Data must be an xarray Dataset.")
+        
+        # Warn if trying to set after initialization
+        if hasattr(self, '_initialized') and self._initialized:
+            warnings.warn(
+                "Setting data after construction is deprecated and will be "
+                "removed in version 2.0. Create a new writer instance instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+        
         self._data = value
+
+    def __enter__(self) -> 'AbstractWriter':
+        """Context manager entry point.
+        
+        Returns:
+        --------
+        AbstractWriter
+            Returns self for use in with statement.
+            
+        Examples:
+        ---------
+        >>> with SomeWriter(dataset) as writer:
+        ...     writer.write('output.nc')
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit - releases resources.
+        
+        Parameters:
+        -----------
+        exc_type : type
+            Exception type if an exception was raised.
+        exc_val : BaseException
+            Exception value if an exception was raised.
+        exc_tb : TracebackType
+            Traceback if an exception was raised.
+        """
+        self._data = None
+
+    def __repr__(self) -> str:
+        """String representation of the writer.
+        
+        Returns:
+        --------
+        str
+            Human-readable string showing class name and format.
+        """
+        return f"{self.__class__.__name__}(format='{self.format_key()}')"
 
     @abstractmethod
     def write(self, file_name: str, **kwargs):

@@ -29,11 +29,7 @@ class RbrAsciiReader(AbstractReader):
     -------
     __init__(input_file: str, mapping: dict | None = None):
         Initializes the RbrAsciiReader with the input file and optional mapping.
-    __create_xarray_dataset(df):
-        Converts a pandas DataFrame to an xarray Dataset, assuming 'Datetime' as the index.
-    __parse_data(file_path: str):
-        Reads RBR data from a .dat file, extracting the datetime and data columns.
-    __read():
+    _load_data():
         Reads the RBR ASCII data file, processes the data, and creates an xarray Dataset.
     
     Properties
@@ -69,9 +65,19 @@ class RbrAsciiReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __create_xarray_dataset(self, df) -> xr.Dataset:
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for RBR ASCII files."""
+        return ('.dat', '.txt', '.asc', '.csv')
+
+    @classmethod
+    def _is_extension_validation_strict(cls) -> bool:
+        """ASCII formats can have various extensions, so warn only."""
+        return False
+
+    def _create_xarray_dataset(self, df) -> xr.Dataset:
         """
         Converts a pandas DataFrame to an xarray Dataset.
         Assumes 'Datetime' as the index of the DataFrame, 
@@ -93,7 +99,7 @@ class RbrAsciiReader(AbstractReader):
 
         return ds
 
-    def __parse_data(self, file_path) -> pd.DataFrame:
+    def _parse_data(self, file_path) -> pd.DataFrame:
         """
         Reads RBR data from a .dat file. Assumes that the actual data 
         starts after an empty line, with the first column being datetime 
@@ -131,10 +137,17 @@ class RbrAsciiReader(AbstractReader):
 
         return data
 
-    def __read(self):
-        data = self.__parse_data(self.input_file)
-        ds = self.__create_xarray_dataset(data)
-        self._data = ds
+    def _load_data(self) -> xr.Dataset:
+        """Load the RBR ASCII data and return an xarray Dataset.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+        """
+        data = self._parse_data(self.input_file)
+        ds = self._create_xarray_dataset(data)
+        return ds
 
     @classmethod
     def format_key(cls) -> str:

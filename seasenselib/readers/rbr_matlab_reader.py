@@ -8,6 +8,7 @@ Otherwise, raises an error.
 """
 
 from __future__ import annotations
+import xarray as xr
 from .base import AbstractReader
 from .rbr_matlab_legacy_reader import RbrMatlabLegacyReader
 from .rbr_matlab_rsktools_reader import RbrMatlabRsktoolsReader
@@ -16,6 +17,13 @@ class RbrMatlabReader(AbstractReader):
     """
     Facade for reading RBR Matlab .mat files, automatically selecting the correct reader
     based on the root variable in the MATLAB structure.
+    
+    Note
+    ----
+    File validation occurs twice: once in this facade and once in the delegate reader.
+    This is intentional design for defense-in-depth and to ensure delegate readers
+    work correctly when instantiated directly. The validation overhead is
+    negligible compared to file loading time.
     """
     def __init__(self, input_file: str,
                  mapping: dict | None = None,
@@ -45,11 +53,22 @@ class RbrMatlabReader(AbstractReader):
         super().__init__(input_file, mapping, **kwargs)
         self._reader_format_name = None
         self._reader_format_key = None
-        self._select_and_read()
+        self._validate_file()
+        # Store kwargs to pass to delegate reader
+        self._kwargs = kwargs
 
-    def _select_and_read(self):
-        """
-        Selects the appropriate reader based on the root variable in the MATLAB file.
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
+
+    def _load_data(self) -> xr.Dataset:
+        """Select the appropriate reader and load data.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
         """
 
         import scipy.io
@@ -58,17 +77,27 @@ class RbrMatlabReader(AbstractReader):
         mat = scipy.io.loadmat(self.input_file, squeeze_me=True, struct_as_record=False)
 
         # Select the appropriate reader based on root variable
+        # Pass through all kwargs to honor configuration options
         if "RBR" in mat:
-            reader = RbrMatlabLegacyReader(self.input_file, mapping=self.mapping)
+            reader = RbrMatlabLegacyReader(
+                self.input_file,
+                mapping=self.mapping,
+                **self._kwargs
+            )
         elif "rsk" in mat:
-            reader = RbrMatlabRsktoolsReader(self.input_file, mapping=self.mapping)
+            reader = RbrMatlabRsktoolsReader(
+                self.input_file,
+                mapping=self.mapping,
+                **self._kwargs
+            )
         else:
             raise ValueError("Neither 'RBR' nor 'rsk' struct found in .mat file.")
 
-        # Read the data using the selected reader
-        self._data = reader.data
+        # Store reader metadata
         self._reader_format_name = reader.format_name()
         self._reader_format_key = reader.format_key()
+        
+        return reader.data
 
     @classmethod
     def format_key(cls) -> str:

@@ -31,13 +31,7 @@ class NortekAsciiReader(AbstractReader):
     -------
     __init__(dat_file_path, header_file_path):
         Initializes the NortekAsciiReader with the paths to the .dat and .hdr files.
-    __read_header(hdr_file_path):
-        Reads the .hdr file to extract column names and units.
-    __parse_data(dat_file_path, headers):
-        Parses the .dat file using the headers information to create a DataFrame.
-    __create_xarray_dataset(df, headers):
-        Converts the DataFrame to an xarray Dataset, renaming columns and assigning units.
-    __read():
+    _load_data():
         Reads the .dat and .hdr files, processes the data, and creates an xarray Dataset.
     
     Properties
@@ -77,9 +71,19 @@ class NortekAsciiReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(dat_file_path, mapping, input_header_file=header_file_path, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __read_header(self, hdr_file_path):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for Nortek ASCII data files."""
+        return ('.dat', '.txt', '.asc')
+
+    @classmethod
+    def _is_extension_validation_strict(cls) -> bool:
+        """ASCII formats can have various extensions, so warn only."""
+        return False
+
+    def _read_header(self, hdr_file_path):
         """Reads the .hdr file to extract column names and units."""
         headers = []
         with open(hdr_file_path, 'r') as file:
@@ -112,7 +116,7 @@ class NortekAsciiReader(AbstractReader):
                         headers.append((col_number, col_name, unit))
         return headers
 
-    def __parse_data(self, dat_file_path, headers):
+    def _parse_data(self, dat_file_path, headers):
         """Parses the .dat file using headers information."""
         columns = [name for _, name, _ in headers]  # Extract just the names from headers
 
@@ -130,7 +134,8 @@ class NortekAsciiReader(AbstractReader):
         data = pd.read_csv(dat_file_path, sep='\s+', names=unique_columns)
         return data
 
-    def __create_xarray_dataset(self, df, headers):
+    def _create_xarray_dataset(self, df, headers):
+        """Converts the DataFrame to an xarray Dataset, renaming columns and assigning units."""
         # Convert columns to datetime
         df['time'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour', 'Minute', 'Second']])
 
@@ -160,11 +165,18 @@ class NortekAsciiReader(AbstractReader):
 
         return ds
 
-    def __read(self):
-        headers = self.__read_header(self.input_header_file)
-        data = self.__parse_data(self.input_file, headers)
-        ds = self.__create_xarray_dataset(data, headers)
-        self._data = ds
+    def _load_data(self) -> xr.Dataset:
+        """Load the Nortek ASCII data and return an xarray Dataset.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+        """
+        headers = self._read_header(self.input_header_file)
+        data = self._parse_data(self.input_file, headers)
+        ds = self._create_xarray_dataset(data, headers)
+        return ds
 
     @classmethod
     def format_key(cls) -> str:

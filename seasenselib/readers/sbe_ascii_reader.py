@@ -39,9 +39,19 @@ class SbeAsciiReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __extract_sample_interval(self, file_path):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for SeaBird ASCII files."""
+        return ('.asc', '.txt', '.dat', '.csv')
+
+    @classmethod
+    def _is_extension_validation_strict(cls) -> bool:
+        """ASCII formats can have various extensions, so warn only."""
+        return False
+
+    def _extract_sample_interval(self, file_path):
         import codecs
 
         with codecs.open(file_path, 'r', 'ascii') as fo:
@@ -57,7 +67,7 @@ class SbeAsciiReader(AbstractReader):
                     break
         return sample_interval
 
-    def __extract_instrument_type(self, file_path):
+    def _extract_instrument_type(self, file_path):
         import codecs
 
         with codecs.open(file_path, 'r', 'ascii') as fo:
@@ -67,7 +77,7 @@ class SbeAsciiReader(AbstractReader):
             return match.group(1)
         return "Unknown Instrument"
 
-    def __parse_data(self, file_path):
+    def _parse_data(self, file_path):
         with open(file_path, 'r') as f:
             lines = f.readlines()
 
@@ -112,7 +122,7 @@ class SbeAsciiReader(AbstractReader):
 
         return df, metadata
 
-    def __create_xarray_dataset(self, df, metadata, sample_interval, instrument_type):
+    def _create_xarray_dataset(self, df, metadata, sample_interval, instrument_type):
         ds = xr.Dataset.from_dataframe(df)
 
         ds = ds.rename_vars({'temperature': 'temperature', 'conductivity': 'conductivity'})
@@ -142,12 +152,19 @@ class SbeAsciiReader(AbstractReader):
 
         return ds
 
-    def __read(self):
-        df, metadata = self.__parse_data(self.input_file)
-        sample_interval = self.__extract_sample_interval(self.input_file)
-        instrument_type = self.__extract_instrument_type(self.input_file)
-        ds = self.__create_xarray_dataset(df, metadata, sample_interval, instrument_type)
-        self._data = ds
+    def _load_data(self) -> xr.Dataset:
+        """Load the SeaBird ASCII data and return an xarray Dataset.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+        """
+        df, metadata = self._parse_data(self.input_file)
+        sample_interval = self._extract_sample_interval(self.input_file)
+        instrument_type = self._extract_instrument_type(self.input_file)
+        ds = self._create_xarray_dataset(df, metadata, sample_interval, instrument_type)
+        return ds
 
     @classmethod
     def format_key(cls) -> str:
