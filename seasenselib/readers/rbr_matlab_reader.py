@@ -8,6 +8,7 @@ Otherwise, raises an error.
 """
 
 from __future__ import annotations
+import xarray as xr
 from .base import AbstractReader
 from .rbr_matlab_legacy_reader import RbrMatlabLegacyReader
 from .rbr_matlab_rsktools_reader import RbrMatlabRsktoolsReader
@@ -45,11 +46,20 @@ class RbrMatlabReader(AbstractReader):
         super().__init__(input_file, mapping, **kwargs)
         self._reader_format_name = None
         self._reader_format_key = None
-        self._select_and_read()
+        self._validate_file()
 
-    def _select_and_read(self):
-        """
-        Selects the appropriate reader based on the root variable in the MATLAB file.
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
+
+    def _load_data(self) -> xr.Dataset:
+        """Select the appropriate reader and load data.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
         """
 
         import scipy.io
@@ -65,10 +75,18 @@ class RbrMatlabReader(AbstractReader):
         else:
             raise ValueError("Neither 'RBR' nor 'rsk' struct found in .mat file.")
 
-        # Read the data using the selected reader
-        self._data = reader.data
+        # Store reader metadata
         self._reader_format_name = reader.format_name()
         self._reader_format_key = reader.format_key()
+        
+        return reader.data
+
+    def _extract_metadata(self) -> None:
+        """Extract RBR MATLAB-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            self._metadata_cache['delegate_reader'] = self._reader_format_key
 
     @classmethod
     def format_key(cls) -> str:

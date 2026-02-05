@@ -49,15 +49,25 @@ class RbrRskReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __read(self):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for RSK files."""
+        return ('.rsk',)
+
+    def _load_data(self) -> xr.Dataset:
         """ Reads a RSK file and converts it to a xarray Dataset. 
 
         This method uses the pyrsktools library to read the RSK file, extracts
         channel information and measurement data, processes the timestamps, and
         organizes the data into a xarray Dataset. It also assigns metadata 
         according to the CF conventions to the dataset variables.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
         """
 
         from pyrsktools import RSK
@@ -95,30 +105,40 @@ class RbrRskReader(AbstractReader):
                 }
                 ds[channel.longName].attrs.update(attrs)
 
+        # Store instrument info for metadata extraction
+        self._instrument_info = rsk.instrument
+        self._db_info = rsk.dbInfo
+
         # Add instrument information as global attributes
-        instrument_info = rsk.instrument
-        if instrument_info:
+        if self._instrument_info:
             attrs = {
-                'instrument_model': instrument_info.model,
-                'instrument_serial': instrument_info.serialID,
-                'instrument_firmware_version': instrument_info.firmwareVersion,
-                'instrument_firmware_type': instrument_info.firmwareType,
+                'instrument_model': self._instrument_info.model,
+                'instrument_serial': self._instrument_info.serialID,
+                'instrument_firmware_version': self._instrument_info.firmwareVersion,
+                'instrument_firmware_type': self._instrument_info.firmwareType,
             }
             ds.attrs.update(attrs)
-            if getattr(instrument_info, "partNumber", None):
-                ds.attrs['instrument_part_number'] = instrument_info.partNumber
+            if getattr(self._instrument_info, "partNumber", None):
+                ds.attrs['instrument_part_number'] = self._instrument_info.partNumber
 
         # Add database information as global attributes
-        db_info = rsk.dbInfo
-        if db_info:
-            ds.attrs['rsk_version'] = db_info.version
-            ds.attrs['rsk_type'] = db_info.type
+        if self._db_info:
+            ds.attrs['rsk_version'] = self._db_info.version
+            ds.attrs['rsk_type'] = self._db_info.type
 
         # Perform default post-processing
         ds = self._perform_default_postprocessing(ds)
 
-        # Store processed data
-        self._data = ds
+        return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract RSK-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            if hasattr(self, '_instrument_info') and self._instrument_info:
+                self._metadata_cache['instrument_model'] = self._instrument_info.model
+                self._metadata_cache['instrument_serial'] = self._instrument_info.serialID
 
     @classmethod
     def format_key(cls) -> str:

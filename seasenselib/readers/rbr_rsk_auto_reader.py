@@ -36,7 +36,7 @@ class RbrRskAutoReader(AbstractReader):
 
     Methods
     -------
-    _select_and_read()
+    _load_data()
         Selects the appropriate reader based on the RSK file type and version,
         and reads the data into an xarray Dataset.
     """
@@ -69,14 +69,24 @@ class RbrRskAutoReader(AbstractReader):
         super().__init__(input_file, mapping, **kwargs)
         self._reader_format_name = None
         self._reader_format_key = None
-        self._select_and_read()
+        self._validate_file()
 
-    def _select_and_read(self):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for RSK files."""
+        return ('.rsk',)
+
+    def _load_data(self) -> xr.Dataset:
         """ Selects the appropriate reader based on the RSK file type and version.
 
         This method connects to the SQLite database within the RSK file, checks the
         type and version of the database, and initializes either the RbrRskReader
-        or the RbrRskLegacyReader accordingly. 
+        or the RbrRskLegacyReader accordingly.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
         """
 
         import sqlite3
@@ -103,10 +113,18 @@ class RbrRskAutoReader(AbstractReader):
         else:
             reader = RbrRskLegacyReader(self.input_file, self.mapping)
 
-        # Read the data using the selected reader
-        self._data = reader.data
+        # Store reader metadata
         self._reader_format_name = reader.format_name()
         self._reader_format_key = reader.format_key()
+        
+        return reader.data
+
+    def _extract_metadata(self) -> None:
+        """Extract RBR RSK-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            self._metadata_cache['delegate_reader'] = self._reader_format_key
 
     @classmethod
     def format_key(cls) -> str:

@@ -52,9 +52,14 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         self._channels_info = {}
         self._epochs_info = {}
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __parse_rsk_data(self, mat_file_path : str) -> xr.Dataset:
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
+
+    def _parse_rsk_data(self, mat_file_path : str) -> xr.Dataset:
         """
         Parse RSK MATLAB file into xarray Dataset.
         
@@ -88,7 +93,7 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         rsk = mat["rsk"]
 
         # Metadata extraction
-        self._extract_metadata(rsk)
+        self._extract_metadata_from_rsk(rsk)
 
         # Timestamp extraction
         timestamps = self._extract_timestamps(rsk)
@@ -108,7 +113,7 @@ class RbrMatlabRsktoolsReader(AbstractReader):
 
         return ds
     
-    def _extract_metadata(self, rsk):
+    def _extract_metadata_from_rsk(self, rsk):
         """Extract metadata from RSK structure."""
 
         # Instrument information
@@ -255,9 +260,17 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         
         return attrs
 
-    def __read(self):
-        """Main reading method."""
-        self._data = self.__parse_rsk_data(self.input_file)
+    def _load_data(self) -> xr.Dataset:
+        """Load data from the MATLAB file and return an xarray Dataset."""
+        return self._parse_rsk_data(self.input_file)
+
+    def _extract_metadata(self) -> None:
+        """Extract RSK-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['instrument_info'] = self._instrument_info
+            self._metadata_cache['channels_info'] = self._channels_info
+            self._metadata_cache['epochs_info'] = self._epochs_info
 
     @classmethod
     def format_key(cls) -> str:

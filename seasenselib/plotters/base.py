@@ -10,6 +10,7 @@ creating different types of visualizations.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import warnings
 import xarray as xr
 import matplotlib.pyplot as plt
 import seasenselib.parameters as params
@@ -22,19 +23,27 @@ class AbstractPlotter(ABC):
     All concrete plotter classes should inherit from this class and implement
     the plot method.
     
+    This class supports the context manager protocol for automatic figure cleanup:
+    
+    >>> with SomePlotter(dataset) as plotter:
+    ...     plotter.plot()
+    >>> # matplotlib figures automatically closed
+    
     Attributes:
     -----------
-    data : xr.Dataset
+    data : xr.Dataset (read-only)
         The xarray Dataset containing the sensor data to be plotted.
     
     Methods:
     --------
     __init__(data: xr.Dataset):
         Initializes the plotter with the provided xarray Dataset.
-    data: xr.Dataset
+    __enter__() -> AbstractPlotter:
+        Context manager entry point.
+    __exit__(exc_type, exc_val, exc_tb) -> None:
+        Context manager exit - closes matplotlib figures.
+    data: xr.Dataset (read-only)
         The xarray Dataset containing the sensor data.
-    data.setter(value: xr.Dataset):
-        Sets the xarray Dataset with validation.
     plot(**kwargs):
         Creates the plot (to be implemented by subclasses).
     _get_dataset_without_nan() -> xr.Dataset:
@@ -67,10 +76,11 @@ class AbstractPlotter(ABC):
 
         # Set the data attribute
         self._data = data
+        self._initialized = True  # Flag to control setter behavior
 
     @property
     def data(self) -> xr.Dataset | None:
-        """Get the xarray Dataset containing the sensor data.
+        """Get the xarray Dataset containing the sensor data (read-only).
 
         Returns:
         --------
@@ -81,7 +91,11 @@ class AbstractPlotter(ABC):
 
     @data.setter
     def data(self, value: xr.Dataset):
-        """Set the xarray Dataset with validation.
+        """Set the xarray Dataset with validation (deprecated).
+        
+        .. deprecated:: 1.5
+            Setting data after construction is deprecated and will be
+            removed in version 2.0. Create a new plotter instance instead.
         
         Parameters:
         -----------
@@ -96,7 +110,57 @@ class AbstractPlotter(ABC):
         if not isinstance(value, xr.Dataset):
             raise TypeError("Data must be an xarray Dataset.")
 
+        # Warn if trying to set after initialization
+        if hasattr(self, '_initialized') and self._initialized:
+            warnings.warn(
+                "Setting data after construction is deprecated and will be "
+                "removed in version 2.0. Create a new plotter instance instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+
         self._data = value
+
+    def __enter__(self) -> 'AbstractPlotter':
+        """Context manager entry point.
+        
+        Returns:
+        --------
+        AbstractPlotter
+            Returns self for use in with statement.
+            
+        Examples:
+        ---------
+        >>> with SomePlotter(dataset) as plotter:
+        ...     plotter.plot()
+        >>> # figures automatically closed
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit - closes matplotlib figures and releases resources.
+        
+        Parameters:
+        -----------
+        exc_type : type
+            Exception type if an exception was raised.
+        exc_val : BaseException
+            Exception value if an exception was raised.
+        exc_tb : TracebackType
+            Traceback if an exception was raised.
+        """
+        plt.close('all')  # Close all matplotlib figures
+        self._data = None
+
+    def __repr__(self) -> str:
+        """String representation of the plotter.
+        
+        Returns:
+        --------
+        str
+            Human-readable string showing class name and key.
+        """
+        return f"{self.__class__.__name__}(key='{self.key()}')"
 
     @abstractmethod
     def plot(self, *args, **kwargs):

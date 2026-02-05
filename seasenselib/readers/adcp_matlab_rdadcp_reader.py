@@ -51,9 +51,14 @@ class AdcpMatlabRdadcpReader(AbstractReader):
         self._bin_dim = bin_dim
         self._beam_dim = beam_dim
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
     # ---------- helpers ----------
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
+
     @staticmethod
     def _matlab_datenum_to_datetime64(dnums: np.ndarray) -> np.ndarray:
         # MATLAB datenum -> Unix epoch days offset (719529 days)
@@ -88,7 +93,7 @@ class AdcpMatlabRdadcpReader(AbstractReader):
         return arr
 
     # ---------- core parsing ----------
-    def __parse(self, mat_file_path):
+    def _parse(self, mat_file_path):
         import scipy.io
 
         mat = scipy.io.loadmat(mat_file_path, squeeze_me=True, struct_as_record=False)
@@ -215,7 +220,7 @@ class AdcpMatlabRdadcpReader(AbstractReader):
 
 
     # ---------- dataset creation ----------
-    def __create_xarray_dataset(self, P) -> xr.Dataset:
+    def _create_xarray_dataset(self, P) -> xr.Dataset:
         n_cells, nt = P["n_cells"], P["nt"]
 
         coords = {
@@ -357,9 +362,21 @@ class AdcpMatlabRdadcpReader(AbstractReader):
 
         return ds
 
-    def __read(self):
-        parsed = self.__parse(self.input_file)
-        self._data = self.__create_xarray_dataset(parsed)
+    def _load_data(self) -> xr.Dataset:
+        """Load data from the MATLAB file and return an xarray Dataset."""
+        parsed = self._parse(self.input_file)
+        return self._create_xarray_dataset(parsed)
+
+    def _extract_metadata(self) -> None:
+        """Extract ADCP-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['dimensions'] = dict(self._data.dims)
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            self._metadata_cache['orientation'] = self._orientation
+            self._metadata_cache['time_dim'] = self._time_dim
+            self._metadata_cache['bin_dim'] = self._bin_dim
+            self._metadata_cache['beam_dim'] = self._beam_dim
 
     # ---------- public API ----------
     @classmethod

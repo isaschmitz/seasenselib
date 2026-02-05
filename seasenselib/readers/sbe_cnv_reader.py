@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import xarray as xr
 
 from seasenselib.readers.base import AbstractReader
 import seasenselib.parameters as params
@@ -100,7 +101,12 @@ class SbeCnvReader(AbstractReader):
         super().__init__(input_file, mapping, **kwargs)
         self._sanitize_input = sanitize_input
         self._fix_missing_coords = fix_missing_coords
-        self.__read()
+        self._validate_file()
+
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for CNV files."""
+        return ('.cnv',)
 
     def __get_scan_interval_in_seconds(self, string):
         pattern = r'^# interval = seconds: ([\d.]+)$'
@@ -624,8 +630,14 @@ class SbeCnvReader(AbstractReader):
         
         return file, False
 
-    def __read(self):
-        """ Reads a CNV file and converts it to a xarray Dataset. """
+    def _load_data(self) -> xr.Dataset:
+        """ Reads a CNV file and converts it to a xarray Dataset.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+        """
 
         import pycnv
         import os
@@ -659,6 +671,9 @@ class SbeCnvReader(AbstractReader):
                 ) from e
             else:
                 raise ValueError(f"pycnv failed to parse CNV file: {error_msg}") from e
+
+        # Store cnv object for metadata extraction
+        self._cnv = cnv
 
         # Map column names ('channel names') to standard names
         channel_names = [d['name'] for d in cnv.channels if 'name' in d]
@@ -716,15 +731,25 @@ class SbeCnvReader(AbstractReader):
             for var in ds:
                 ds[var] = ds[var].where(ds[var] != bad_flag, np.nan)
 
-        # Store processed data
-        self._data = ds
-
         # Clean up temporary sanitized file after all processing is complete
         if was_sanitized and os.path.exists(file_to_read):
             try:
                 os.unlink(file_to_read)
             except Exception as e:
                 print(f"Warning: Could not delete temporary file {file_to_read}: {e}")
+
+        return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract CNV-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            if hasattr(self, '_cnv') and self._cnv:
+                self._metadata_cache['latitude'] = self._cnv.lat
+                self._metadata_cache['longitude'] = self._cnv.lon
+                if hasattr(self._cnv, 'instrument_type'):
+                    self._metadata_cache['instrument'] = self._cnv.instrument_type
 
     @classmethod
     def format_key(cls) -> str:

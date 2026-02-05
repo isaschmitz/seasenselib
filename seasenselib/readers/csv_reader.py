@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 import csv
+import xarray as xr
 import seasenselib.parameters as params
 from .base import AbstractReader
 
@@ -30,7 +31,7 @@ class CsvReader(AbstractReader):
     -------
     __init__(input_file: str, mapping: dict | None = None)
         Initializes the CsvReader with the input file and optional mapping.
-    __read()
+    _load_data()
         Reads the CSV file and processes the data into an xarray Dataset.
     
     Properties
@@ -71,9 +72,26 @@ class CsvReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __read(self):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for CSV files."""
+        return ('.csv', '.txt', '.dat')
+
+    @classmethod
+    def _is_extension_validation_strict(cls) -> bool:
+        """CSV/text formats can have various extensions, so warn only."""
+        return False
+
+    def _load_data(self) -> xr.Dataset:
+        """Load the CSV file and return an xarray Dataset.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+        """
         # Read the CSV into a dictionary of columns
         with open(self.input_file, mode='r', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
@@ -113,8 +131,14 @@ class CsvReader(AbstractReader):
                 super()._assign_data_for_key_to_xarray_dataset(ds, key, data[key])
                 super()._assign_metadata_for_key_to_xarray_dataset( ds, key )
     
-            # Store processed data
-            self._data = ds
+            return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract CSV-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['num_rows'] = len(self._data[params.TIME])
+            self._metadata_cache['variables'] = list(self._data.data_vars)
 
     @classmethod
     def format_key(cls) -> str:

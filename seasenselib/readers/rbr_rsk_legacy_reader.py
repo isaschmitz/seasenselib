@@ -3,6 +3,7 @@ Module for reading RBR legacy .rsk files into xarray Datasets.
 """
 
 from __future__ import annotations
+import sqlite3
 import pandas as pd
 import xarray as xr
 from .base import AbstractReader
@@ -52,7 +53,12 @@ class RbrRskLegacyReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
+
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for RSK files."""
+        return ('.rsk',)
 
     def _read_instrument_data(self, con: sqlite3.Connection) -> dict:
         """ Reads instrument data from the RSK file. 
@@ -142,16 +148,14 @@ class RbrRskLegacyReader(AbstractReader):
         query = "SELECT * FROM data"
         return pd.read_sql_query(query, con)
 
-    def __read(self):
-        """ Reads a RSK file (legacy format) and converts it to a xarray Dataset. 
+    def _load_data(self) -> xr.Dataset:
+        """Load data from RSK file (legacy format) and return an xarray Dataset. 
         
         This method connects to the SQLite database within the RSK file, retrieves
         channel information and measurement data, processes the timestamps, and
         organizes the data into a xarray Dataset. It also assigns long names and
         units as attributes to the dataset variables.
         """
-
-        import sqlite3
 
         # Connect to the SQLite database in the RSK file
         con = sqlite3.connect( self.input_file )
@@ -238,11 +242,18 @@ class RbrRskLegacyReader(AbstractReader):
         # Perform default post-processing
         ds = self._perform_default_postprocessing(ds)
 
-        # Store processed data
-        self._data = ds
-
         # Close the database connection
         con.close()
+
+        return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract RSK-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['dimensions'] = dict(self._data.dims)
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            self._metadata_cache['coordinates'] = list(self._data.coords)
 
     @classmethod
     def format_key(cls) -> str:

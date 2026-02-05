@@ -32,7 +32,7 @@ class SeasunTobReader(AbstractReader):
     -------
     __init__(input_file, mapping = {}, encoding = 'latin-1'):
         Initializes the TobReader with the input file, optional mapping, and encoding.
-    __read():
+    _load_data():
         Reads the TOB file, processes the data, and creates an xarray Dataset.
     
     Properties
@@ -77,14 +77,29 @@ class SeasunTobReader(AbstractReader):
         """
         super().__init__(input_file, mapping, **kwargs)
         self._encoding = encoding
-        self.__read()
+        self._validate_file()
 
-    def __read(self):
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for TOB files."""
+        return ('.tob', '.txt', '.asc')
+
+    @classmethod
+    def _is_extension_validation_strict(cls) -> bool:
+        """ASCII formats can have various extensions, so warn only."""
+        return False
+
+    def _load_data(self) -> xr.Dataset:
         """ Reads a TOB file from Sea & Sun CTD into a xarray dataset. 
         
         This method processes the TOB file, extracts column names and units,
         and organizes the data into an xarray Dataset. It handles the conversion of
         timestamps to datetime objects and assigns metadata according to CF conventions.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
         """
 
         import gsw
@@ -151,8 +166,14 @@ class SeasunTobReader(AbstractReader):
         for key in (list(ds.data_vars.keys()) + list(ds.coords.keys())):
             super()._assign_metadata_for_key_to_xarray_dataset( ds, key)
 
-        # Store processed data
-        self._data = ds
+        return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract TOB-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            self._metadata_cache['encoding'] = self._encoding
 
     @classmethod
     def format_key(cls) -> str:

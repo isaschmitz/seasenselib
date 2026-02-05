@@ -25,7 +25,7 @@ class NetCdfReader(AbstractReader):
     -------
     __init__(input_file):
         Initializes the NetCdfReader with the input file.
-    __read():
+    _load_data():
         Reads the netCDF file and processes the data into an xarray Dataset.
     
     Properties
@@ -66,16 +66,37 @@ class NetCdfReader(AbstractReader):
                 Whether to sort variables alphabetically.
         """
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
 
-    def __read(self):
-        """Reads the netCDF file and processes the data into an xarray Dataset."""
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for netCDF files."""
+        return ('.nc', '.nc4', '.netcdf')
 
+    def _load_data(self) -> xr.Dataset:
+        """Load the netCDF file and return an xarray Dataset.
+        
+        Returns
+        -------
+        xr.Dataset
+            The loaded dataset.
+        """
         # Read from netCDF file
-        self._data = xr.open_dataset(self.input_file)
+        ds = xr.open_dataset(self.input_file)
 
         # Validation
-        super()._validate_necessary_parameters(self.data, None, None, 'netCDF file')
+        super()._validate_necessary_parameters(ds, None, None, 'netCDF file')
+        
+        return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract netCDF-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['dimensions'] = dict(self._data.dims)
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            self._metadata_cache['coordinates'] = list(self._data.coords)
+            self._metadata_cache['conventions'] = self._data.attrs.get('Conventions', None)
 
     @classmethod
     def format_key(cls) -> str:

@@ -54,10 +54,15 @@ class RbrMatlabLegacyReader(AbstractReader):
         self._channel_names = []
         self._channel_units = []
         super().__init__(input_file, mapping, **kwargs)
-        self.__read()
+        self._validate_file()
+
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...] | None:
+        """Return valid file extensions for MATLAB files."""
+        return ('.mat',)
 
     # ---------- internals ----------
-    def __parse_data(self, mat_file_path) -> pd.DataFrame:
+    def _parse_data(self, mat_file_path) -> pd.DataFrame:
         """
         Parse MATLAB file into a pandas.DataFrame with a datetime index and
         multiple parameter columns based on available channels. Also returns 
@@ -230,7 +235,7 @@ class RbrMatlabLegacyReader(AbstractReader):
         clean_name = clean_name.strip('_')  # Remove leading/trailing underscores
         return clean_name.lower() if clean_name else "unknown_parameter"
 
-    def __create_xarray_dataset(self, df: pd.DataFrame) -> xr.Dataset:
+    def _create_xarray_dataset(self, df: pd.DataFrame) -> xr.Dataset:
         """Create an xarray Dataset and attach metadata for all parameters."""
         # Create data variables for each column in the DataFrame
         data_vars = {}
@@ -287,9 +292,20 @@ class RbrMatlabLegacyReader(AbstractReader):
         
         return ds
 
-    def __read(self):
-        df = self.__parse_data(self.input_file)
-        self._data = self.__create_xarray_dataset(df)
+    def _load_data(self) -> xr.Dataset:
+        """Load data from the MATLAB file and return an xarray Dataset."""
+        df = self._parse_data(self.input_file)
+        return self._create_xarray_dataset(df)
+
+    def _extract_metadata(self) -> None:
+        """Extract RBR-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['serial_number'] = self._serial_number
+            self._metadata_cache['start_date'] = self._start_date
+            self._metadata_cache['end_date'] = self._end_date
+            self._metadata_cache['channel_names'] = self._channel_names
+            self._metadata_cache['channel_units'] = self._channel_units
 
     # ------------ public API ------------
     @classmethod

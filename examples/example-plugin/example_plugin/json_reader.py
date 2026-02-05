@@ -3,11 +3,21 @@ Example JSON Reader Plugin for SeaSenseLib.
 
 This reader demonstrates how to create a custom reader plugin that extends
 SeaSenseLib with support for reading oceanographic data from JSON files.
+
+The modern reader design pattern includes:
+1. Call _validate_file() in __init__ for fail-fast validation
+2. Implement _load_data() method that returns xr.Dataset (called lazily by data property)
+3. Implement _get_valid_extensions() class method for extension validation
+4. Implement _extract_metadata() to populate format-specific metadata (called after _load_data)
+
+IMPORTANT: Do NOT call _load_data() in __init__! The base class data property 
+handles lazy loading automatically.
 """
 
 from pathlib import Path
 import xarray as xr
 from seasenselib.readers.base import AbstractReader
+
 
 class JsonReader(AbstractReader):
     """
@@ -24,9 +34,15 @@ class JsonReader(AbstractReader):
             "location": "..."
         }
     }
+    
+    This reader follows the modern reader design pattern:
+    - Uses _validate_file() for fail-fast validation
+    - Implements _load_data() for data loading
+    - Implements _get_valid_extensions() for extension checking
+    - Implements _extract_metadata() for format-specific metadata
     """
 
-    def __init__(self, input_file: str):
+    def __init__(self, input_file: str, **kwargs):
         """
         Initialize the JSON reader.
         
@@ -34,23 +50,17 @@ class JsonReader(AbstractReader):
         -----------
         input_file : str
             Path to the JSON data file
+        **kwargs
+            Additional base class parameters (mapping, perform_default_postprocessing, etc.)
         """
-        super().__init__(input_file)
+        super().__init__(input_file, **kwargs)
         self._validate_file()
-        self._read_json_file()
+        # Data is loaded lazily via the data property - no _load_data() call here!
 
-    def _validate_file(self):
-        """Validate that the input file exists and is readable."""
-        file_path = Path(self.input_file)
-        
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {self.input_file}")
-
-        if not file_path.is_file():
-            raise ValueError(f"Not a file: {self.input_file}")
-
-        if file_path.suffix.lower() != '.json':
-            raise ValueError(f"Expected .json file, got: {file_path.suffix}")
+    @classmethod
+    def _get_valid_extensions(cls) -> tuple[str, ...]:
+        """Return valid file extensions for JSON files."""
+        return ('.json',)
 
     @classmethod
     def format_key(cls) -> str:
@@ -67,7 +77,7 @@ class JsonReader(AbstractReader):
         """Return the file extension for this format."""
         return ".json"
 
-    def get_data(self) -> xr.Dataset | None:
+    def _load_data(self) -> xr.Dataset:
         """
         Read JSON data and return as xarray Dataset.
         
@@ -80,19 +90,6 @@ class JsonReader(AbstractReader):
         -------
         ValueError
             If the JSON structure is invalid
-        """
-        if self.data is None:
-            self._data = self._read_json_file()
-        return self.data
-
-    def _read_json_file(self) -> xr.Dataset:
-        """
-        Internal method to read and parse JSON file.
-        
-        Returns:
-        --------
-        xr.Dataset
-            Parsed dataset with oceanographic data
         """
 
         # Lazy imports
@@ -117,7 +114,7 @@ class JsonReader(AbstractReader):
 
         # Extract data variables
         data_vars = {}
-        metadata = data.pop('metadata', {})
+        self._json_metadata = data.pop('metadata', {})
 
         for key, values in data.items():
             if key == 'time':
@@ -146,7 +143,7 @@ class JsonReader(AbstractReader):
         ds.attrs['date_created'] = datetime.now().isoformat()
 
         # Add metadata from JSON
-        for key, value in metadata.items():
+        for key, value in self._json_metadata.items():
             ds.attrs[key] = value
 
         # Add time coordinate attributes
@@ -157,7 +154,13 @@ class JsonReader(AbstractReader):
         # Perform default post-processing
         ds = self._perform_default_postprocessing(ds)
 
-        # Store processed data
-        self._data = ds
-
         return ds
+
+    def _extract_metadata(self) -> None:
+        """Extract JSON-specific metadata."""
+        super()._extract_metadata()
+        if self._data is not None:
+            self._metadata_cache['variables'] = list(self._data.data_vars)
+            # Include any metadata from the JSON file
+            if hasattr(self, '_json_metadata'):
+                self._metadata_cache.update(self._json_metadata)
