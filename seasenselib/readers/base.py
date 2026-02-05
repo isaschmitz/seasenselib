@@ -354,7 +354,7 @@ class AbstractReader(ABC):
         Examples
         --------
         >>> reader = SomeReader('data.cnv')
-        >>> print(reader.is_loaded)  # True after __init__ loads data
+        >>> print(reader.is_loaded)  # False until data property is accessed
         """
         return self._data is not None
 
