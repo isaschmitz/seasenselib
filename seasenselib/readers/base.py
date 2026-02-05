@@ -160,8 +160,7 @@ class AbstractReader(ABC):
         >>> class MyReader(AbstractReader):
         ...     def __init__(self, input_file, **kwargs):
         ...         super().__init__(input_file, **kwargs)
-        ...         self._validate_file()  # Validate before loading
-        ...         self._data = self._load_data()
+        ...         self._validate_file()  # Validate before data is accessed
         """
         path = Path(self._input_file)
         
