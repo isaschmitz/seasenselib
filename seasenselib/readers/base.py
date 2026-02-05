@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from importlib.metadata import version
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import re
 import xarray as xr
 import gsw
