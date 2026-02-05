@@ -367,18 +367,6 @@ class AdcpMatlabRdadcpReader(AbstractReader):
         parsed = self._parse(self.input_file)
         return self._create_xarray_dataset(parsed)
 
-    def _extract_metadata(self) -> None:
-        """Extract ADCP-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['dimensions'] = dict(self._data.dims)
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['orientation'] = self._orientation
-            self._metadata_cache['time_dim'] = self._time_dim
-            self._metadata_cache['bin_dim'] = self._bin_dim
-            self._metadata_cache['beam_dim'] = self._beam_dim
-
-    # ---------- public API ----------
     @classmethod
     def format_key(cls) -> str:
         return 'adcp-matlab-rdadcp'

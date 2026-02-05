@@ -116,7 +116,6 @@ class AbstractReader(ABC):
         self._input_file = input_file
         self._input_header_file = input_header_file
         self._data = None
-        self._metadata_cache: Dict[str, Any] = {}
         self._mapping = mapping if mapping is not None else {}
         self._config_perform_postprocessing = perform_default_postprocessing
         self._config_rename_variables = rename_variables
@@ -279,30 +278,6 @@ class AbstractReader(ABC):
             "See AbstractReader documentation for the expected interface."
         )
 
-    def _extract_metadata(self) -> None:
-        """Extract format-specific metadata after loading data.
-        
-        Subclasses can override this method to populate `_metadata_cache`
-        with format-specific metadata such as instrument information,
-        data dimensions, or file format version.
-        
-        This method is called after `_load_data()` when the data property
-        is accessed, allowing metadata extraction from the loaded dataset.
-        
-        The base implementation does nothing. Subclasses should call
-        `super()._extract_metadata()` and then add their own metadata.
-        
-        Examples
-        --------
-        >>> class MyReader(AbstractReader):
-        ...     def _extract_metadata(self) -> None:
-        ...         super()._extract_metadata()
-        ...         if self._data is not None:
-        ...             self._metadata_cache['num_variables'] = len(self._data.data_vars)
-        ...             self._metadata_cache['dimensions'] = dict(self._data.dims)
-        """
-        pass  # Base implementation does nothing
-
     # =========================================================================
     # Properties
     # =========================================================================
@@ -358,11 +333,14 @@ class AbstractReader(ABC):
 
     @property
     def metadata(self) -> Dict[str, Any]:
-        """Get file metadata without loading data.
+        """Get file-level metadata without loading data.
         
         This property provides access to file-level metadata such as
         file size and modification time without requiring the full
         data to be loaded into memory.
+        
+        For dataset-specific information (variables, dimensions, attributes),
+        access the `data` property and inspect the xarray Dataset directly.
         
         Returns
         -------
@@ -376,13 +354,17 @@ class AbstractReader(ABC):
             - format_key: Reader format key
             - format_name: Reader format name
             
-        Additionally, format-specific metadata added by `_extract_metadata()`
-        will be included after the data has been loaded.
-            
         Examples
         --------
         >>> reader = SomeReader('data.cnv')
-        >>> print(f"File size: {reader.metadata['file_size_human']}")
+        >>> print(f"File: {reader.metadata['file_name']}")
+        >>> print(f"Size: {reader.metadata['file_size_human']}")
+        >>> print(f"Format: {reader.metadata['format_name']}")
+        >>> 
+        >>> # For dataset info, use reader.data:
+        >>> ds = reader.data
+        >>> print(f"Variables: {list(ds.data_vars)}")
+        >>> print(f"Dimensions: {dict(ds.dims)}")
         """
         path = Path(self._input_file)
         stat = path.stat()
@@ -397,8 +379,7 @@ class AbstractReader(ABC):
         else:
             size_human = f"{size_bytes:.1f} PB"
         
-        # Base metadata (always available)
-        result = {
+        return {
             'file_path': str(path.absolute()),
             'file_name': path.name,
             'file_size': stat.st_size,
@@ -407,16 +388,11 @@ class AbstractReader(ABC):
             'format_key': self.format_key(),
             'format_name': self.format_name(),
         }
-        
-        # Include format-specific metadata from cache (populated by _extract_metadata)
-        result.update(self._metadata_cache)
-        
-        return result
 
     def reload(self) -> 'AbstractReader':
         """Force reload data from file.
         
-        Clears any cached data (including metadata) and re-reads from the file.
+        Clears any cached data and re-reads from the file.
         This is useful when the underlying file has been modified
         or to free memory temporarily.
         
@@ -438,7 +414,6 @@ class AbstractReader(ABC):
         >>> ds = reader.data  # Re-read from file (lazy loading)
         """
         self._data = None
-        self._metadata_cache = {}
         return self
 
     def __enter__(self) -> 'AbstractReader':

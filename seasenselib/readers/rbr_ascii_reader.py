@@ -149,12 +149,6 @@ class RbrAsciiReader(AbstractReader):
         ds = self._create_xarray_dataset(data)
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract RBR ASCII-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-
     @classmethod
     def format_key(cls) -> str:
         return 'rbr-ascii'

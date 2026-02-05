@@ -286,15 +286,6 @@ class AdcpMatlabUhhdsReader(AbstractReader):
             "source": "Acoustic Doppler Current Profiler",
         })
 
-    def _extract_metadata(self) -> None:
-        """Extract ADCP UHH DS-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['format'] = self._format
-            self._metadata_cache['dimensions'] = dict(self._data.dims)
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['coordinates'] = list(self._data.coords)
-
     @classmethod
     def format_key(cls) -> str:
         return 'adcp-matlab-uhhds'

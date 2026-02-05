@@ -8,7 +8,6 @@ The modern reader design pattern includes:
 1. Call _validate_file() in __init__ for fail-fast validation
 2. Implement _load_data() method that returns xr.Dataset (called lazily by data property)
 3. Implement _get_valid_extensions() class method for extension validation
-4. Implement _extract_metadata() to populate format-specific metadata
 
 IMPORTANT: Do NOT call _load_data() in __init__! The base class data property 
 handles lazy loading automatically.
@@ -39,7 +38,6 @@ class JsonReader(AbstractReader):
     - Uses _validate_file() for fail-fast validation
     - Implements _load_data() for data loading
     - Implements _get_valid_extensions() for extension checking
-    - Implements _extract_metadata() for format-specific metadata
     """
 
     def __init__(self, input_file: str, **kwargs):
@@ -155,12 +153,3 @@ class JsonReader(AbstractReader):
         ds = self._perform_default_postprocessing(ds)
 
         return ds
-
-    def _extract_metadata(self) -> None:
-        """Extract JSON-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            # Include any metadata from the JSON file
-            if hasattr(self, '_json_metadata'):
-                self._metadata_cache.update(self._json_metadata)

@@ -178,13 +178,6 @@ class NortekAsciiReader(AbstractReader):
         ds = self._create_xarray_dataset(data, headers)
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract Nortek ASCII-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['header_file'] = self.input_header_file
-
     @classmethod
     def format_key(cls) -> str:
         return 'nortek-ascii'

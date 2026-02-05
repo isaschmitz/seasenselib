@@ -89,15 +89,6 @@ class NetCdfReader(AbstractReader):
         
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract netCDF-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['dimensions'] = dict(self._data.dims)
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['coordinates'] = list(self._data.coords)
-            self._metadata_cache['conventions'] = self._data.attrs.get('Conventions', None)
-
     @classmethod
     def format_key(cls) -> str:
         return 'netcdf'

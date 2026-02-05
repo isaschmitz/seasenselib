@@ -297,17 +297,6 @@ class RbrMatlabLegacyReader(AbstractReader):
         df = self._parse_data(self.input_file)
         return self._create_xarray_dataset(df)
 
-    def _extract_metadata(self) -> None:
-        """Extract RBR-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['serial_number'] = self._serial_number
-            self._metadata_cache['start_date'] = self._start_date
-            self._metadata_cache['end_date'] = self._end_date
-            self._metadata_cache['channel_names'] = self._channel_names
-            self._metadata_cache['channel_units'] = self._channel_units
-
-    # ------------ public API ------------
     @classmethod
     def format_key(cls) -> str:
         return "rbr-matlab-legacy"

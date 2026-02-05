@@ -166,13 +166,6 @@ class SbeAsciiReader(AbstractReader):
         ds = self._create_xarray_dataset(df, metadata, sample_interval, instrument_type)
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract SeaBird ASCII-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['instrument'] = self._data.attrs.get('source', 'Unknown')
-
     @classmethod
     def format_key(cls) -> str:
         return 'sbe-ascii'

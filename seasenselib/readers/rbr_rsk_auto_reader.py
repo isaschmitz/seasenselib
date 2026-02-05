@@ -70,6 +70,8 @@ class RbrRskAutoReader(AbstractReader):
         self._reader_format_name = None
         self._reader_format_key = None
         self._validate_file()
+        # Store kwargs to pass to delegate reader
+        self._kwargs = kwargs
 
     @classmethod
     def _get_valid_extensions(cls) -> tuple[str, ...]:
@@ -108,23 +110,25 @@ class RbrRskAutoReader(AbstractReader):
         )
 
         # Select the appropriate reader based on the type and version
+        # Pass through all kwargs to honor configuration options
         if is_modern:
-            reader = RbrRskReader(self.input_file, self.mapping)
+            reader = RbrRskReader(
+                self.input_file,
+                self.mapping,
+                **self._kwargs
+            )
         else:
-            reader = RbrRskLegacyReader(self.input_file, self.mapping)
+            reader = RbrRskLegacyReader(
+                self.input_file,
+                self.mapping,
+                **self._kwargs
+            )
 
         # Store reader metadata
         self._reader_format_name = reader.format_name()
         self._reader_format_key = reader.format_key()
         
         return reader.data
-
-    def _extract_metadata(self) -> None:
-        """Extract RBR RSK-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['delegate_reader'] = self._reader_format_key
 
     @classmethod
     def format_key(cls) -> str:

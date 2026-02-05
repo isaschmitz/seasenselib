@@ -47,6 +47,8 @@ class RbrMatlabReader(AbstractReader):
         self._reader_format_name = None
         self._reader_format_key = None
         self._validate_file()
+        # Store kwargs to pass to delegate reader
+        self._kwargs = kwargs
 
     @classmethod
     def _get_valid_extensions(cls) -> tuple[str, ...]:
@@ -68,10 +70,19 @@ class RbrMatlabReader(AbstractReader):
         mat = scipy.io.loadmat(self.input_file, squeeze_me=True, struct_as_record=False)
 
         # Select the appropriate reader based on root variable
+        # Pass through all kwargs to honor configuration options
         if "RBR" in mat:
-            reader = RbrMatlabLegacyReader(self.input_file, mapping=self.mapping)
+            reader = RbrMatlabLegacyReader(
+                self.input_file,
+                self.mapping,
+                **self._kwargs
+            )
         elif "rsk" in mat:
-            reader = RbrMatlabRsktoolsReader(self.input_file, mapping=self.mapping)
+            reader = RbrMatlabRsktoolsReader(
+                self.input_file,
+                self.mapping,
+                **self._kwargs
+            )
         else:
             raise ValueError("Neither 'RBR' nor 'rsk' struct found in .mat file.")
 
@@ -80,13 +91,6 @@ class RbrMatlabReader(AbstractReader):
         self._reader_format_key = reader.format_key()
         
         return reader.data
-
-    def _extract_metadata(self) -> None:
-        """Extract RBR MATLAB-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['delegate_reader'] = self._reader_format_key
 
     @classmethod
     def format_key(cls) -> str:

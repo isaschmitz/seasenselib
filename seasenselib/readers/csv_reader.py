@@ -133,13 +133,6 @@ class CsvReader(AbstractReader):
     
             return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract CSV-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['num_rows'] = len(self._data[params.TIME])
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-
     @classmethod
     def format_key(cls) -> str:
         return 'csv'

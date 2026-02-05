@@ -131,15 +131,6 @@ class RbrRskReader(AbstractReader):
 
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract RSK-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            if hasattr(self, '_instrument_info') and self._instrument_info:
-                self._metadata_cache['instrument_model'] = self._instrument_info.model
-                self._metadata_cache['instrument_serial'] = self._instrument_info.serialID
-
     @classmethod
     def format_key(cls) -> str:
         return 'rbr-rsk-default'

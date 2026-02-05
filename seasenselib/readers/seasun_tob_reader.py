@@ -168,13 +168,6 @@ class SeasunTobReader(AbstractReader):
 
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract TOB-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            self._metadata_cache['encoding'] = self._encoding
-
     @classmethod
     def format_key(cls) -> str:
         return 'seasun-tob'

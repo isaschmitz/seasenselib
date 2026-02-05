@@ -264,14 +264,6 @@ class RbrMatlabRsktoolsReader(AbstractReader):
         """Load data from the MATLAB file and return an xarray Dataset."""
         return self._parse_rsk_data(self.input_file)
 
-    def _extract_metadata(self) -> None:
-        """Extract RSK-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['instrument_info'] = self._instrument_info
-            self._metadata_cache['channels_info'] = self._channels_info
-            self._metadata_cache['epochs_info'] = self._epochs_info
-
     @classmethod
     def format_key(cls) -> str:
         return 'rbr-matlab-rsktools'

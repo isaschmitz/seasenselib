@@ -740,17 +740,6 @@ class SbeCnvReader(AbstractReader):
 
         return ds
 
-    def _extract_metadata(self) -> None:
-        """Extract CNV-specific metadata."""
-        super()._extract_metadata()
-        if self._data is not None:
-            self._metadata_cache['variables'] = list(self._data.data_vars)
-            if hasattr(self, '_cnv') and self._cnv:
-                self._metadata_cache['latitude'] = self._cnv.lat
-                self._metadata_cache['longitude'] = self._cnv.lon
-                if hasattr(self._cnv, 'instrument_type'):
-                    self._metadata_cache['instrument'] = self._cnv.instrument_type
-
     @classmethod
     def format_key(cls) -> str:
         return 'sbe-cnv'
