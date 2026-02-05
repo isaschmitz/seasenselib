@@ -17,6 +17,13 @@ class RbrMatlabReader(AbstractReader):
     """
     Facade for reading RBR Matlab .mat files, automatically selecting the correct reader
     based on the root variable in the MATLAB structure.
+    
+    Note
+    ----
+    File validation occurs twice: once in this facade and once in the delegate reader.
+    This is intentional design for defense-in-depth and to ensure delegate readers
+    work correctly when instantiated directly. The validation overhead is
+    negligible compared to file loading time.
     """
     def __init__(self, input_file: str,
                  mapping: dict | None = None,

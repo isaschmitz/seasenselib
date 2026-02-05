@@ -17,7 +17,14 @@ class RbrRskAutoReader(AbstractReader):
 
     This class checks the type and version of the RSK file and initializes either
     the RbrRskReader for modern files or the RbrRskLegacyReader for legacy files.
-    It reads the data and returns it as an xarray Dataset.      
+    It reads the data and returns it as an xarray Dataset.
+    
+    Note
+    ----
+    File validation occurs twice: once in this facade and once in the delegate reader.
+    This is intentional design for defense-in-depth and to ensure delegate readers
+    work correctly when instantiated directly. The validation overhead is
+    negligible compared to file loading time.      
 
     Attributes
     ----------

@@ -800,9 +800,9 @@ class AbstractReader(ABC):
     def get_data(self) -> xr.Dataset | None:
         """Returns the processed data as an xarray Dataset.
         
-        .. deprecated:: 1.5
+        .. deprecated:: 0.4.0
             Use the :attr:`data` property instead: ``reader.data``
-            This method will be removed in version 2.0.
+            This method will be removed in version 1.0.0.
             
         Returns
         -------
@@ -811,7 +811,7 @@ class AbstractReader(ABC):
         """
         import warnings
         warnings.warn(
-            "get_data() is deprecated and will be removed in version 2.0. "
+            "get_data() is deprecated and will be removed in version 1.0.0. "
             "Use the 'data' property instead: reader.data",
             DeprecationWarning,
             stacklevel=2
