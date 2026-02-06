@@ -8,18 +8,14 @@ from specific file formats (e.g., CNV, TOB, NetCDF, CSV, RBR, Nortek).
 """
 
 from __future__ import annotations
-import os
-import platform
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
-from importlib.metadata import version
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Any
 import re
+import warnings
 import xarray as xr
-import gsw
 import seasenselib.parameters as params
+from seasenselib.readers.utils import TimeConverter, DatasetProcessor, DatasetBuilder
 
 MODULE_NAME = 'seasenselib'
 
@@ -458,26 +454,73 @@ class AbstractReader(ABC):
         loaded_str = "loaded" if self.is_loaded else "not loaded"
         return f"{self.__class__.__name__}('{self._input_file}', {loaded_str})"
 
+    # =========================================================================
+    # Time Conversion Methods (deprecated - use TimeConverter directly)
+    # =========================================================================
+    
     def _julian_to_gregorian(self, julian_days, start_date):
-        full_days = int(julian_days) - 1  # Julian days start at 1, not 0
-        seconds = (julian_days - int(julian_days)) * 24 * 60 * 60
-        return start_date + timedelta(days=full_days, seconds=seconds)
+        """Convert Julian days to Gregorian datetime.
+        
+        .. deprecated:: 0.4.0
+            Use :meth:`TimeConverter.julian_to_gregorian` directly instead.
+            This wrapper will be removed in version 1.0.0.
+        """
+        warnings.warn(
+            "AbstractReader._julian_to_gregorian() is deprecated. "
+            "Use TimeConverter.julian_to_gregorian() directly instead. "
+            "This method will be removed in version 1.0.0.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return TimeConverter.julian_to_gregorian(julian_days, start_date)
 
     def _elapsed_seconds_since_jan_1970_to_datetime(self, elapsed_seconds):
-        base_date = datetime(1970, 1, 1)
-        time_delta = timedelta(seconds=elapsed_seconds)
-        return base_date + time_delta
+        """Convert elapsed seconds since Jan 1970 to datetime.
+        
+        .. deprecated:: 0.4.0
+            Use :meth:`TimeConverter.elapsed_seconds_since_jan_1970_to_datetime` directly.
+            This wrapper will be removed in version 1.0.0.
+        """
+        warnings.warn(
+            "AbstractReader._elapsed_seconds_since_jan_1970_to_datetime() is deprecated. "
+            "Use TimeConverter.elapsed_seconds_since_jan_1970_to_datetime() directly instead. "
+            "This method will be removed in version 1.0.0.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return TimeConverter.elapsed_seconds_since_jan_1970_to_datetime(elapsed_seconds)
 
     def _elapsed_seconds_since_jan_2000_to_datetime(self, elapsed_seconds):
-        base_date = datetime(2000, 1, 1)
-        time_delta = timedelta(seconds=elapsed_seconds)
-        date_value = base_date + time_delta
-        return date_value
+        """Convert elapsed seconds since Jan 2000 to datetime.
+        
+        .. deprecated:: 0.4.0
+            Use :meth:`TimeConverter.elapsed_seconds_since_jan_2000_to_datetime` directly.
+            This wrapper will be removed in version 1.0.0.
+        """
+        warnings.warn(
+            "AbstractReader._elapsed_seconds_since_jan_2000_to_datetime() is deprecated. "
+            "Use TimeConverter.elapsed_seconds_since_jan_2000_to_datetime() directly instead. "
+            "This method will be removed in version 1.0.0.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return TimeConverter.elapsed_seconds_since_jan_2000_to_datetime(elapsed_seconds)
 
     def _elapsed_seconds_since_offset_to_datetime(self, elapsed_seconds, offset_datetime):
-        base_date = offset_datetime
-        time_delta = timedelta(seconds=elapsed_seconds)
-        return base_date + time_delta
+        """Convert elapsed seconds since offset to datetime.
+        
+        .. deprecated:: 0.4.0
+            Use :meth:`TimeConverter.elapsed_seconds_since_offset_to_datetime` directly.
+            This wrapper will be removed in version 1.0.0.
+        """
+        warnings.warn(
+            "AbstractReader._elapsed_seconds_since_offset_to_datetime() is deprecated. "
+            "Use TimeConverter.elapsed_seconds_since_offset_to_datetime() directly instead. "
+            "This method will be removed in version 1.0.0.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return TimeConverter.elapsed_seconds_since_offset_to_datetime(elapsed_seconds, offset_datetime)
 
     def _validate_necessary_parameters(self, data, longitude, latitude, entity: str):
         if not params.TIME and not params.TIME_J and not params.TIME_Q \
@@ -486,32 +529,55 @@ class AbstractReader(ABC):
         if not params.PRESSURE in data and not params.DEPTH:
             raise ValueError(f"Parameter '{params.PRESSURE}' is missing in {entity}.")
 
+    # =========================================================================
+    # Dataset Building Methods (thin wrappers for backward compatibility)
+    # =========================================================================
+
     def _get_xarray_dataset_template(self, time_array, depth_array, 
                 latitude, longitude, depth_name = params.DEPTH):
-        coords = dict(
-            time = time_array,
-            latitude = latitude,
-            longitude = longitude,
+        """Create an xarray Dataset template with coordinates.
+        
+        This is a thin wrapper around :meth:`DatasetBuilder.create_template`
+        for backward compatibility with subclasses.
+        
+        Parameters
+        ----------
+        time_array : array-like
+            Array of datetime values for the time coordinate.
+        depth_array : array-like or None
+            Array of depth values, or None if not available.
+        latitude : float
+            Latitude coordinate value.
+        longitude : float  
+            Longitude coordinate value.
+        depth_name : str, optional
+            Name for the depth variable. Defaults to params.DEPTH.
+            
+        Returns
+        -------
+        xr.Dataset
+            Empty xarray Dataset with coordinates set up.
+        """
+        return DatasetBuilder.create_template(
+            time_array, depth_array, latitude, longitude, depth_name
         )
 
-        # Only add depth coordinate if depth_array is not None
-        if depth_array is not None:
-            coords[depth_name] = ([params.TIME], depth_array)
-
-        return xr.Dataset(
-            data_vars = dict(),
-            coords = coords,
-            attrs = dict(
-                latitude = latitude,
-                longitude = longitude,
-                CreateTime = datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                DataType = 'TimeSeries',
-            )
-        )
-
-    def _assign_data_for_key_to_xarray_dataset(self, ds: xr.Dataset, key:str, data):
-        ds[key] = xr.DataArray(data, dims=params.TIME)
-        ds[key].attrs = {}
+    def _assign_data_for_key_to_xarray_dataset(self, ds: xr.Dataset, key: str, data):
+        """Assign a data array to the dataset.
+        
+        This is a thin wrapper around :meth:`DatasetBuilder.assign_data`
+        for backward compatibility with subclasses.
+        
+        Parameters
+        ----------
+        ds : xr.Dataset
+            The xarray Dataset to add data to.
+        key : str
+            The variable name for the data.
+        data : array-like
+            The data values to assign.
+        """
+        DatasetBuilder.assign_data(ds, key, data)
 
     def _assign_metadata_for_key_to_xarray_dataset(self, ds: xr.Dataset, key: str, 
                     label = None, unit = None):
@@ -534,6 +600,10 @@ class AbstractReader(ABC):
                 label = label.replace(f"[{unit}]", '').strip() # Remove unit from label
             ds[key].attrs['long_name'] = label
 
+    # =========================================================================
+    # Dataset Processing Methods (delegates to DatasetProcessor)
+    # =========================================================================
+
     def _derive_oceanographic_parameters(self, ds: xr.Dataset) -> xr.Dataset:
         """Derive oceanographic parameters from temperature, pressure, and salinity.
         
@@ -554,168 +624,72 @@ class AbstractReader(ABC):
         xr.Dataset
             The xarray Dataset with derived parameters added.
         """
+        # Create callback for metadata assignment if enabled
+        metadata_callback = None
+        if self._config_assign_metadata:
+            metadata_callback = self._assign_metadata_for_key_to_xarray_dataset
         
-        # Find the appropriate temperature variable
-        temperature_var = None
-        if params.TEMPERATURE in ds.data_vars:
-            temperature_var = params.TEMPERATURE
-        elif f"{params.TEMPERATURE}_1" in ds.data_vars:
-            temperature_var = f"{params.TEMPERATURE}_1"
-        
-        # Find the appropriate salinity variable
-        salinity_var = None
-        if params.SALINITY in ds.data_vars:
-            salinity_var = params.SALINITY
-        elif f"{params.SALINITY}_1" in ds.data_vars:
-            salinity_var = f"{params.SALINITY}_1"
-        
-        # Pressure should typically be singular, but check both possibilities
-        pressure_var = None
-        if params.PRESSURE in ds.data_vars:
-            pressure_var = params.PRESSURE
-        elif f"{params.PRESSURE}_1" in ds.data_vars:
-            pressure_var = f"{params.PRESSURE}_1"
-        
-        # Check if we have all required parameters for oceanographic calculations
-        if temperature_var and salinity_var and pressure_var:
-            
-            # Derive density using GSW
-            ds[params.DENSITY] = ([params.TIME], gsw.density.rho(
-                ds[salinity_var].values, 
-                ds[temperature_var].values, 
-                ds[pressure_var].values))
-            
-            # Derive potential temperature using GSW
-            ds[params.POTENTIAL_TEMPERATURE] = ([params.TIME], gsw.pt0_from_t(
-                ds[salinity_var].values, 
-                ds[temperature_var].values, 
-                ds[pressure_var].values))
-            
-            if self._config_assign_metadata:
-                # Assign metadata for derived parameters
-                self._assign_metadata_for_key_to_xarray_dataset(ds, params.DENSITY)
-                self._assign_metadata_for_key_to_xarray_dataset(ds, params.POTENTIAL_TEMPERATURE)
-                
-        return ds
+        return DatasetProcessor.derive_oceanographic_parameters(ds, metadata_callback)
 
     def _sort_xarray_variables(self, ds: xr.Dataset) -> xr.Dataset:
-        """Sorts the variables in an xarray Dataset based on their standard names.
-
-        The sorting is done in a way that ensures that variables with the same base name
-        (e.g., temperature_1, temperature_2) are grouped together.
-
+        """Sort variables in an xarray Dataset alphabetically by name.
+        
+        Variables with the same base name (e.g., temperature_1, temperature_2)
+        are grouped together due to alphabetical sorting.
+        
         Parameters
         ----------
         ds : xr.Dataset
             The xarray Dataset to be sorted.
-
+            
         Returns
         -------
         xr.Dataset
             The xarray Dataset with variables sorted by their names.
         """
-        # Sort all variables and coordinates by name
-        all_names = sorted(list(ds.data_vars) + list(ds.coords))
-
-        # Create a new Dataset with sorted variables and coordinates
-        ds_sorted = ds[all_names]
-
-        # Ensure that the attributes are preserved
-        ds_sorted.attrs = ds.attrs.copy()
-
-        return ds_sorted
+        return DatasetProcessor.sort_variables(ds)
 
     def _rename_xarray_parameters(self, ds: xr.Dataset) -> xr.Dataset:
+        """Rename variables in an xarray Dataset according to standard mappings.
+        
+        Handles aliases with or without trailing numbering and ensures unique 
+        standard names with numbering. If a standard name only occurs once, 
+        it will not have a numbering suffix.
+        
+        Parameters
+        ----------
+        ds : xr.Dataset
+            The xarray Dataset with variables to rename.
+            
+        Returns
+        -------
+        xr.Dataset
+            The xarray Dataset with renamed variables.
         """
-        Rename variables in an xarray.Dataset according to params.default_mappings.
-        Handles aliases with or without trailing numbering and ensures unique standard 
-        names with numbering. If a standard name only occurs once, it will not have a 
-        numbering suffix.
-        """
-
-        ds_vars = list(ds.variables)
-        rename_dict = {}
-
-        # Build a reverse mapping: alias_lower -> standard_name
-        alias_to_standard = {}
-        for standard_name, aliases in params.default_mappings.items():
-            for alias in aliases:
-                alias_to_standard[alias.lower()] = standard_name
-
-        # First, collect all matches: (standard_name, original_var, suffix)
-        matches = []
-        for var in ds_vars:
-            if not isinstance(var, str):
-                continue
-            var_lower = var.lower()
-            matched = False
-            for alias_lower, standard_name in alias_to_standard.items():
-                # Match alias with optional _<number> at the end
-                m = re.match(rf"^{re.escape(alias_lower)}(_?\d{{1,2}})?$", var_lower)
-                if m:
-                    suffix = m.group(1) or ""
-                    matches.append((standard_name, var, suffix))
-                    matched = True
-                    break
-            if not matched:
-                continue
-
-        # Group by standard_name
-        grouped = defaultdict(list)
-        for standard_name, var, suffix in matches:
-            grouped[standard_name].append((var, suffix))
-
-        # Assign new names: only add numbering if there are multiple
-        for standard_name, vars_with_suffixes in grouped.items():
-            if len(vars_with_suffixes) == 1:
-                # Only one variable: use plain standard name
-                rename_dict[vars_with_suffixes[0][0]] = standard_name
-            else:
-                # Multiple variables: always add numbering (_1, _2, ...)
-                for idx, (var, suffix) in enumerate(vars_with_suffixes, 1):
-                    rename_dict[var] = f"{standard_name}_{idx}"
-
-        return ds.rename(rename_dict)
+        return DatasetProcessor.rename_parameters(ds)
 
     def _assign_default_global_attributes(self, ds: xr.Dataset) -> xr.Dataset:
-        """Assigns default global attributes to the xarray Dataset.
-
-        This method sets the global attributes for the xarray Dataset, including
-        the title, institution, source, and other relevant metadata.
-
+        """Assign default global attributes to the xarray Dataset.
+        
+        Sets CF-compliant global attributes including history, conventions,
+        and processor information.
+        
         Parameters
         ----------
         ds : xr.Dataset
             The xarray Dataset to which the global attributes will be assigned.
+            
+        Returns
+        -------
+        xr.Dataset
+            The xarray Dataset with global attributes assigned.
         """
-
-        module_name = MODULE_NAME
-        module_version = version(MODULE_NAME)
-        module_reader_class = self.__class__.__name__
-        python_version = platform.python_version()
-        input_file = self._input_file
-        input_file_type = self.format_name()
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        # assemble history entry
-        history_entry = (
-            f"{timestamp}: created from {input_file_type} file ({input_file}) "
-            f"using {module_name} v{module_version} ({module_reader_class} class) "
-            f"under Python {python_version}"
+        return DatasetProcessor.assign_default_global_attributes(
+            ds,
+            input_file=self._input_file,
+            format_name=self.format_name(),
+            reader_class_name=self.__class__.__name__
         )
-
-        ds.attrs['history'] = history_entry
-        ds.attrs['Conventions'] = 'CF-1.8'
-
-        # Information about the processor of the xarray dataset
-        ds.attrs['processor_name'] = module_name
-        ds.attrs['processor_version'] = module_version
-        ds.attrs['processor_reader_class'] = module_reader_class
-        ds.attrs['processor_python_version'] = python_version
-        ds.attrs['processor_input_filename'] = input_file
-        ds.attrs['processor_input_file_type'] = input_file_type
-
-        return ds
 
     def _perform_default_postprocessing(self, ds: xr.Dataset) -> xr.Dataset:
         """
