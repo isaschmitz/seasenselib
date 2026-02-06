@@ -13,7 +13,6 @@ import numpy as np
 import xarray as xr
 from datetime import datetime
 from seasenselib.readers.utils import DatasetBuilder, DatasetProcessor
-import seasenselib.parameters as params
 
 
 class TestDatasetProcessor(unittest.TestCase):
