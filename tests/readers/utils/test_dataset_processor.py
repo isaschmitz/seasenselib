@@ -222,9 +222,8 @@ if __name__ == '__main__':
         sorted_ds = DatasetProcessor.sort_variables(self.ds)
         
         self.assertIn('time', sorted_ds.coords)
-        self.assertIn('lat', sorted_ds.coords)
-        self.assertIn('lon', sorted_ds.coords)
-        self.assertIn('depth', sorted_ds.coords)
+        self.assertIn('latitude', sorted_ds.coords)
+        self.assertIn('longitude', sorted_ds.coords)
 
     def test_rename_parameters_basic(self):
         """Test basic parameter renaming."""

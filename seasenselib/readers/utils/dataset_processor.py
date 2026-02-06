@@ -12,14 +12,11 @@ import re
 from collections import defaultdict
 from datetime import datetime, timezone
 from importlib.metadata import version
-from typing import TYPE_CHECKING, Optional, Callable
+from typing import Optional, Callable
 
 import xarray as xr
 
 import seasenselib.parameters as params
-
-if TYPE_CHECKING:
-    from seasenselib.readers.base import AbstractReader
 
 MODULE_NAME = 'seasenselib'
 
