@@ -7,7 +7,7 @@ Tests all static methods for time format conversions including:
 """
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime
 from seasenselib.readers.utils import TimeConverter
 
 
