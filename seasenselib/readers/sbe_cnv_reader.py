@@ -1,5 +1,4 @@
-"""
-Module for reading CTD data from SBE CNV files.
+"""Module for reading CTD data from SBE CNV files.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ class SbeCnvReader(AbstractReader):
 
     The reader includes automatic fixing capabilities for common issues:
     - File sanitization: Fixes trailing whitespace and malformed lines that cause pycnv errors
-    - Coordinate defaults: Uses 45° latitude when missing (common for moored instruments)
+    - Coordinate defaults: Uses 45 degrees latitude when missing (common for moored instruments)
     
     These behaviors can be controlled via the sanitize_input and fix_missing_coords parameters.
 
@@ -80,7 +79,7 @@ class SbeCnvReader(AbstractReader):
             may fail to load. CLI flag: --no-sanitize
         fix_missing_coords : bool, default=True
             Whether to automatically use default values for missing coordinates
-            (e.g., 45° latitude for depth calculation). When False, missing
+            (e.g., 45 degrees latitude for depth calculation). When False, missing
             coordinates will result in NaN values. CLI flag: --no-fix-coords
         mapping : dict, optional
             Variable name mapping dictionary.
@@ -190,6 +189,8 @@ class SbeCnvReader(AbstractReader):
         numpy.ndarray | None
             Time coordinates as datetime values.
         """
+
+        from seasenselib.readers.utils import TimeConverter
         
         # Try to extract start_time from header instead of using cnv.date
         start_time_from_header = self.__get_start_time_from_header(cnv.header)
@@ -211,17 +212,17 @@ class SbeCnvReader(AbstractReader):
         
         # Check for time variables (params match raw CNV names after mapping)
         if params.TIME_S in xarray_data:
-            time_coords = np.array([self._elapsed_seconds_since_offset_to_datetime(elapsed_seconds, offset_datetime) \
+            time_coords = np.array([TimeConverter.elapsed_seconds_since_offset_to_datetime(elapsed_seconds, offset_datetime) 
                                    for elapsed_seconds in xarray_data[params.TIME_S]])
         elif params.TIME_J in xarray_data:
             year_startdate = datetime(year=offset_datetime.year, month=1, day=1)
-            time_coords = np.array([self._julian_to_gregorian(jday, year_startdate) \
+            time_coords = np.array([TimeConverter.julian_to_gregorian(jday, year_startdate) 
                                     for jday in xarray_data[params.TIME_J]])
         elif params.TIME_Q in xarray_data:
-            time_coords = np.array([self._elapsed_seconds_since_jan_2000_to_datetime(elapsed_seconds) \
+            time_coords = np.array([TimeConverter.elapsed_seconds_since_jan_2000_to_datetime(elapsed_seconds) 
                                     for elapsed_seconds in xarray_data[params.TIME_Q]])
         elif params.TIME_N in xarray_data:
-            time_coords = np.array([self._elapsed_seconds_since_jan_1970_to_datetime(elapsed_seconds) \
+            time_coords = np.array([TimeConverter.elapsed_seconds_since_jan_1970_to_datetime(elapsed_seconds) 
                                     for elapsed_seconds in xarray_data[params.TIME_N]])
         else:
             timedelta = self.__get_scan_interval_in_seconds(cnv.header)
@@ -524,9 +525,9 @@ class SbeCnvReader(AbstractReader):
         Notes
         -----
         If latitude is not available from CNV metadata or data columns, a default
-        value of 45° is used. This is standard practice in oceanography for cases
-        like moored instruments. The depth error from using 45° instead of actual
-        latitude is typically < 0.3m at typical CTD depths (< 0.5m at 100 dbar).
+        value of 45 degrees is used. This is standard practice in oceanography for cases
+        like moored instruments. The depth error from using 45 degrees instead of actual
+        latitude is typically less than 0.3m at typical CTD depths (less than 0.5m at 100 dbar).
         """
 
         import gsw
@@ -556,7 +557,7 @@ class SbeCnvReader(AbstractReader):
                 if self._fix_missing_coords:
                     lat = 45.0
                     print(f"Warning: Latitude not found in CNV file '{self.input_file}'. "
-                          f"Using default latitude of {lat}° for depth calculation. "
+                          f"Using default latitude of {lat} degrees for depth calculation. "
                           f"This is common for moored instruments and typically introduces < 0.3m error. "
                           f"Set fix_missing_coords=False to disable this behavior.")
                 else:
