@@ -9,6 +9,7 @@ from specific file formats (e.g., CNV, TOB, NetCDF, CSV, RBR, Nortek).
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
 import re
