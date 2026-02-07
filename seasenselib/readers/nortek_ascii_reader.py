@@ -131,7 +131,7 @@ class NortekAsciiReader(AbstractReader):
                 seen[col] = 0
             unique_columns.append(col)
 
-        data = pd.read_csv(dat_file_path, sep='\s+', names=unique_columns)
+        data = pd.read_csv(dat_file_path, sep=r'\s+', names=unique_columns)
         return data
 
     def _create_xarray_dataset(self, df, headers):
